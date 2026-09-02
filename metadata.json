@@ -1,0 +1,6 @@
+{
+  "name": "Snowhite Captain",
+  "description": "Customer app for Snowhite services including rides and laundry.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
