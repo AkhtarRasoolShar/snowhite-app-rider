@@ -7,11 +7,27 @@ import androidx.navigation.NavHostController
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.google.android.gms.location.LocationServices
+import android.location.Geocoder
+import android.location.Location
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.Manifest
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import android.os.Build
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.ExistingPeriodicWorkPolicy
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -35,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -78,7 +95,8 @@ data class RiderAuthData(
     val name: String,
     val phone: String,
     val service_zone: String,
-    val status: String
+    val status: String,
+    val whatsapp_number: String? = null
 )
 
 data class RiderOrder(
@@ -87,10 +105,12 @@ data class RiderOrder(
     @SerializedName("total_amount") val total_amount: String? = null,
     @SerializedName("date") val date: String? = null,
     @SerializedName("status") val status: String? = null,
-    @SerializedName("items") val items: List<CartItem>? = null
+    @SerializedName("items") val items: List<OrderItem>? = null,
+    @SerializedName("zone") val zone: String? = null,
+    var distanceInMeters: Float? = null
 )
 
-data class CartItem(
+data class OrderItem(
     @SerializedName("name") val name: String? = null,
     @SerializedName("quantity") val quantity: Int? = null
 )
@@ -120,6 +140,9 @@ interface RiderApiService {
 
     @GET("routes.php?action=get_rider_orders")
     suspend fun getRiderOrders(@Query("rider_id") riderId: Int): Response<GenericResponse<List<RiderOrder>>>
+
+    @POST("routes.php?action=update_rider_profile")
+    suspend fun updateProfile(@Body request: Map<String, String>): Response<GenericResponse<Unit>>
 
     @POST("routes.php?action=update_order_status")
     suspend fun updateOrderStatus(@Body request: UpdateOrderStatusRequest): Response<GenericResponse<Unit>>
@@ -153,6 +176,7 @@ object SessionManager {
             putInt("rider_id", data.id)
             putString("rider_name", data.name)
             putString("rider_phone", data.phone)
+            putString("whatsapp_number", data.whatsapp_number ?: "")
             putString("rider_zones", data.service_zone ?: "")
         }.apply()
     }
@@ -185,6 +209,8 @@ class RiderViewModel : ViewModel() {
     val riderName = _riderName.asStateFlow()
     private val _riderPhone = MutableStateFlow("")
     val riderPhone = _riderPhone.asStateFlow()
+    private val _whatsappNumber = MutableStateFlow("")
+    val whatsappNumber = _whatsappNumber.asStateFlow()
     private val _riderZone = MutableStateFlow("")
     val riderZone = _riderZone.asStateFlow()
     
@@ -195,15 +221,23 @@ class RiderViewModel : ViewModel() {
     private val _bankIban = MutableStateFlow("")
     val bankIban = _bankIban.asStateFlow()
 
+    private val _quickReply1 = MutableStateFlow("I am on my way!")
+    val quickReply1 = _quickReply1.asStateFlow()
+    private val _quickReply2 = MutableStateFlow("I have arrived at the pickup location.")
+    val quickReply2 = _quickReply2.asStateFlow()
+
     fun initSession(context: Context) {
         val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
         _riderId.value = prefs.getInt("rider_id", -1)
         _riderName.value = prefs.getString("rider_name", "") ?: ""
         _riderPhone.value = prefs.getString("rider_phone", "") ?: ""
+        _whatsappNumber.value = prefs.getString("whatsapp_number", "") ?: ""
         _riderZone.value = prefs.getString("rider_zones", "") ?: ""
         _homeAddress.value = prefs.getString("rider_address", "") ?: ""
         _bankName.value = prefs.getString("bank_name", "") ?: ""
         _bankIban.value = prefs.getString("bank_iban", "") ?: ""
+        _quickReply1.value = prefs.getString("quick_reply_1", "I am on my way!") ?: "I am on my way!"
+        _quickReply2.value = prefs.getString("quick_reply_2", "I have arrived at the pickup location.") ?: "I have arrived at the pickup location."
     }
 
     private fun saveAuthData(context: Context, data: RiderAuthData) {
@@ -212,17 +246,20 @@ class RiderViewModel : ViewModel() {
             putInt("rider_id", data.id)
             putString("rider_name", data.name)
             putString("rider_phone", data.phone)
+            putString("whatsapp_number", data.whatsapp_number ?: "")
             putString("rider_zones", data.service_zone)
         }.apply()
         initSession(context)
     }
     
-    fun saveProfileDetails(context: Context, address: String, bank: String, iban: String) {
+    fun saveProfileDetails(context: Context, address: String, bank: String, iban: String, qr1: String, qr2: String) {
         val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
         prefs.edit().apply {
             putString("rider_address", address)
             putString("bank_name", bank)
             putString("bank_iban", iban)
+            putString("quick_reply_1", qr1)
+            putString("quick_reply_2", qr2)
         }.apply()
         initSession(context)
         Toast.makeText(context, "Profile Updated", Toast.LENGTH_SHORT).show()
@@ -232,6 +269,31 @@ class RiderViewModel : ViewModel() {
         val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
         prefs.edit().clear().apply()
         _riderId.value = -1
+    }
+
+    
+    fun updateWhatsApp(context: Context, whatsapp: String) {
+        val id = _riderId.value
+        if (id == -1) return
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val request = mapOf("rider_id" to id.toString(), "whatsapp_number" to whatsapp)
+                val response = RetrofitClient.apiService.updateProfile(request)
+                if (response.isSuccessful && response.body()?.status == "success") {
+                    val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
+                    prefs.edit().putString("whatsapp_number", whatsapp).apply()
+                    _whatsappNumber.value = whatsapp
+                    Toast.makeText(context, "Profile Updated!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, response.body()?.message ?: "Failed to update profile", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show()
+            } finally {
+                _isLoading.value = false
+            }
+        }
     }
 
     fun clearError() {
@@ -305,7 +367,9 @@ class RiderViewModel : ViewModel() {
             try {
                 val response = RetrofitClient.apiService.getAvailableOrders(zone, riderId)
                 if (response.isSuccessful && response.body()?.status == "success") {
-                    _availableOrders.value = response.body()?.data ?: emptyList()
+                    val newOrders = response.body()?.data ?: emptyList()
+                    _availableOrders.value = newOrders
+                    calculateDistances(context, newOrders)
                 } else {
                     Toast.makeText(context, response.body()?.message ?: "Failed to fetch orders", Toast.LENGTH_SHORT).show()
                 }
@@ -313,6 +377,41 @@ class RiderViewModel : ViewModel() {
                 Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show()
             } finally {
                 _isLoading.value = false
+            }
+        }
+    }
+
+    private fun calculateDistances(context: Context, orders: List<RiderOrder>) {
+        if (orders.isEmpty()) return
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+        
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    val geocoder = Geocoder(context, Locale.getDefault())
+                    val updatedOrders = orders.map { order ->
+                        val address = order.pickup_address
+                        if (!address.isNullOrEmpty()) {
+                            try {
+                                val results = geocoder.getFromLocationName(address, 1)
+                                if (!results.isNullOrEmpty()) {
+                                    val loc = results[0]
+                                    val resultsArray = FloatArray(1)
+                                    Location.distanceBetween(
+                                        location.latitude, location.longitude,
+                                        loc.latitude, loc.longitude,
+                                        resultsArray
+                                    )
+                                    order.copy(distanceInMeters = resultsArray[0])
+                                } else order
+                            } catch (e: Exception) { order }
+                        } else order
+                    }
+                    withContext(Dispatchers.Main) {
+                        _availableOrders.value = updatedOrders
+                    }
+                }
             }
         }
     }
@@ -740,11 +839,37 @@ fun MainAppScreen(viewModel: RiderViewModel) {
 @Composable
 fun RadarScreen(viewModel: RiderViewModel) {
     val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = { permissions: Map<String, Boolean> ->
+            if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+                viewModel.fetchAvailableOrders(context)
+            }
+        }
+    )
+    
+    LaunchedEffect(Unit) {
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
+
     val orders by viewModel.availableOrders.collectAsState()
     val zone by viewModel.riderZone.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
     var selectedOrderForReview by remember { mutableStateOf<RiderOrder?>(null) }
+    var sortOption by remember { mutableStateOf("Newest") }
+    var expandedSortMenu by remember { mutableStateOf(false) }
+    
+    val sortedOrders = remember(orders, sortOption) {
+        when (sortOption) {
+            "Total Amount" -> orders.sortedByDescending { it.total_amount?.toDoubleOrNull() ?: 0.0 }
+            "Proximity" -> orders.sortedBy { it.distanceInMeters ?: Float.MAX_VALUE }
+            "Hub" -> orders.sortedBy { it.zone ?: "" }
+            else -> orders.sortedByDescending { it.order_id ?: 0 }
+        }
+    }
 
     val infiniteTransition = rememberInfiniteTransition()
     val alpha by infiniteTransition.animateFloat(
@@ -771,54 +896,53 @@ fun RadarScreen(viewModel: RiderViewModel) {
         Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.85f)))
         
         Column(modifier = Modifier.fillMaxSize()) {
-            // Glassmorphism Header
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                color = Color.White.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(24.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
-                shadowElevation = 0.dp
+            // Premium Delivery Header
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF03045E)),
+                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(20.dp).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Default.LocationOn,
-                        contentDescription = "Radar",
-                        tint = Color(0xFF00B4D8),
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Searching in: ${zone.uppercase()}",
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 18.sp,
-                            color = Color(0xFF03045E)
-                        )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(8.dp)
+                                    .size(10.dp)
                                     .background(Color.Green.copy(alpha = alpha), CircleShape)
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                "Live Radar Active",
-                                color = Color.Gray,
+                                "Radar Active",
+                                color = Color.LightGray,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
                             )
                         }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Searching in:",
+                            color = Color.LightGray,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            zone.uppercase(),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
+                    Spacer(Modifier.width(16.dp))
                     IconButton(
                         onClick = { viewModel.fetchAvailableOrders(context) },
-                        modifier = Modifier.background(Color.White, CircleShape).size(40.dp)
+                        modifier = Modifier.background(Color(0xFF00B4D8), CircleShape).size(48.dp)
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color(0xFF00B4D8))
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
                     }
                 }
             }
@@ -848,17 +972,82 @@ fun RadarScreen(viewModel: RiderViewModel) {
                     }
                 }
             } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${sortedOrders.size} Available",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.DarkGray,
+                        fontSize = 16.sp
+                    )
+                    Box {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFF0F4F8),
+                            modifier = Modifier.clickable { expandedSortMenu = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.FilterList, contentDescription = "Sort", tint = Color(0xFF03045E), modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(sortOption, color = Color(0xFF03045E), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Spacer(Modifier.width(4.dp))
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Drop", tint = Color(0xFF03045E))
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = expandedSortMenu,
+                            onDismissRequest = { expandedSortMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Newest") },
+                                onClick = { sortOption = "Newest"; expandedSortMenu = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Total Amount") },
+                                onClick = { sortOption = "Total Amount"; expandedSortMenu = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Proximity") },
+                                onClick = { sortOption = "Proximity"; expandedSortMenu = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Hub (Zone)") },
+                                onClick = { sortOption = "Hub"; expandedSortMenu = false }
+                            )
+                        }
+                    }
+                }
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(orders) { order ->
+                    items(sortedOrders, key = { it.order_id ?: it.hashCode() }) { order ->
+                        val alpha = remember { Animatable(0f) }
+                        val translateY = remember { Animatable(50f) }
+                        
+                        LaunchedEffect(order.order_id) {
+                            launch { alpha.animateTo(1f, animationSpec = tween(400)) }
+                            launch { translateY.animateTo(0f, animationSpec = tween(400, easing = FastOutSlowInEasing)) }
+                        }
+                        
                         Card(
                             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White),
                             shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.fillMaxWidth().clickable { selectedOrderForReview = order }
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .graphicsLayer {
+                                    this.alpha = alpha.value
+                                    this.translationY = translateY.value
+                                }
+                                .clickable { selectedOrderForReview = order }
                         ) {
                             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
                                 // Subtle Left Border
@@ -1189,6 +1378,9 @@ fun ProfileScreen(viewModel: RiderViewModel) {
     var address by remember { mutableStateOf(viewModel.homeAddress.value) }
     var bankName by remember { mutableStateOf(viewModel.bankName.value) }
     var bankIban by remember { mutableStateOf(viewModel.bankIban.value) }
+    var whatsapp by remember { mutableStateOf(if (viewModel.whatsappNumber.value.isNotEmpty()) viewModel.whatsappNumber.value else viewModel.riderPhone.value) }
+    var qr1 by remember { mutableStateOf(viewModel.quickReply1.value) }
+    var qr2 by remember { mutableStateOf(viewModel.quickReply2.value) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AsyncImage(model = "https://images.pexels.com/photos/5591581/pexels-photo-5591581.jpeg?auto=compress&cs=tinysrgb&w=1080", contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -1230,6 +1422,15 @@ fun ProfileScreen(viewModel: RiderViewModel) {
                 )
                 
                 Spacer(Modifier.height(16.dp))
+                Text("Contact Information", color = DarkBlue, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = whatsapp,
+                    onValueChange = { whatsapp = it },
+                    label = { Text("WhatsApp Number (Visible to Customers)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(Modifier.height(16.dp))
                 Text("Bank Details for Payouts", color = DarkBlue, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = bankName,
@@ -1245,9 +1446,42 @@ fun ProfileScreen(viewModel: RiderViewModel) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 
+                                Spacer(Modifier.height(16.dp))
+                Text("WhatsApp Quick Replies", color = DarkBlue, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = qr1,
+                    onValueChange = { qr1 = it },
+                    label = { Text("Quick Reply 1 (e.g. On my way)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/?text=${Uri.encode(qr1)}"))
+                            try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "WhatsApp not installed", Toast.LENGTH_SHORT).show() }
+                        }) {
+                            Icon(Icons.Default.Send, contentDescription = "Send", tint = Color(0xFF25D366))
+                        }
+                    }
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = qr2,
+                    onValueChange = { qr2 = it },
+                    label = { Text("Quick Reply 2 (e.g. Arrived)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/?text=${Uri.encode(qr2)}"))
+                            try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "WhatsApp not installed", Toast.LENGTH_SHORT).show() }
+                        }) {
+                            Icon(Icons.Default.Send, contentDescription = "Send", tint = Color(0xFF25D366))
+                        }
+                    }
+                )
+                
                 Spacer(Modifier.height(16.dp))
                 Button(
-                    onClick = { viewModel.saveProfileDetails(context, address, bankName, bankIban) },
+                    onClick = { viewModel.saveProfileDetails(context, address, bankName, bankIban, qr1, qr2)
+                        viewModel.updateWhatsApp(context, whatsapp) },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = TealAccent)
                 ) {
@@ -1271,7 +1505,7 @@ fun ProfileScreen(viewModel: RiderViewModel) {
                     Text("Customer Support / Help", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 
-                Spacer(Modifier.height(16.dp))
+                                Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = { viewModel.logout(context) },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -1292,6 +1526,20 @@ fun ProfileScreen(viewModel: RiderViewModel) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
+        val workRequest = PeriodicWorkRequestBuilder<OrderPollingWorker>(15, TimeUnit.MINUTES).build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "OrderPolling",
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
+
         enableEdgeToEdge()
         setContent {
             RiderTheme {
