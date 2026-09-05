@@ -76,6 +76,7 @@ secrets {
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
   implementation("com.squareup.retrofit2:converter-gson:2.11.0")
   implementation("com.google.code.gson:gson:2.10.1")
   implementation("io.coil-kt:coil-compose:2.6.0")
@@ -142,5 +143,6 @@ dependencies {
   "ksp"(libs.moshi.kotlin.codegen)
 }
 dependencies {
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
   implementation("androidx.work:work-runtime-ktx:2.9.0")
 }

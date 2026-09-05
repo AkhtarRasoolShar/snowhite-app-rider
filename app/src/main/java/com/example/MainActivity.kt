@@ -22,6 +22,7 @@ import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
 import androidx.activity.enableEdgeToEdge
 import android.os.Build
 import androidx.work.PeriodicWorkRequestBuilder
@@ -30,8 +31,15 @@ import androidx.work.ExistingPeriodicWorkPolicy
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.*
+
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -65,9 +73,11 @@ import coil.compose.AsyncImage
 import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -85,39 +95,65 @@ val ErrorRed = Color(0xFFEF4444)
 
 // --- API Models ---
 data class GenericResponse<T>(
-    val status: String,
-    val message: String,
-    val data: T?
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("data") val data: T? = null
+)
+
+
+
+data class TypingStatus(
+    @SerializedName("is_typing") val is_typing: Boolean? = null
+)
+
+data class ChatMessage(
+    @SerializedName("id") val id: Int? = null,
+    @SerializedName("order_id") val orderId: Int? = null,
+    @SerializedName("sender_type") val senderType: String? = null,
+    @SerializedName("sender_id") val senderId: Int? = null,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("status") var status: String? = null, // e.g., sent, delivered, seen
+    @SerializedName("is_read") val isRead: String? = "0"
+)
+
+data class SendMessageRequest(
+    @SerializedName("order_id") val orderId: Int,
+    @SerializedName("sender_type") val senderType: String,
+    @SerializedName("sender_id") val senderId: Int,
+    @SerializedName("message") val message: String
 )
 
 data class RiderAuthData(
-    val id: Int,
-    val name: String,
-    val phone: String,
-    val service_zone: String,
-    val status: String,
+    @SerializedName("id") val id: Int = -1,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("phone") val phone: String? = null,
+    @SerializedName("service_zone") val service_zone: String? = null,
+    @SerializedName("status") val status: String? = null,
     val whatsapp_number: String? = null
 )
 
 data class RiderOrder(
-    @SerializedName("order_id") val order_id: Int? = null,
-    @SerializedName("pickup_address") val pickup_address: String? = null,
-    @SerializedName("total_amount") val total_amount: String? = null,
+    @SerializedName("order_id") val orderId: String? = null,
+    @SerializedName("pickup_address") val pickupAddress: String? = null,
+    @SerializedName("total_amount") val totalAmount: String? = null,
     @SerializedName("date") val date: String? = null,
     @SerializedName("status") val status: String? = null,
-    @SerializedName("items") val items: List<OrderItem>? = null,
+    @SerializedName("items") val items: List<OrderItem>? = emptyList(),
     @SerializedName("zone") val zone: String? = null,
+    @SerializedName("customer_name") val customerName: String? = null,
+    @SerializedName("customer_phone") val customerPhone: String? = null,
     var distanceInMeters: Float? = null
 )
 
 data class OrderItem(
     @SerializedName("name") val name: String? = null,
-    @SerializedName("quantity") val quantity: Int? = null
+    @SerializedName("quantity") val quantity: String? = null
 )
 
-data class RiderLoginRequest(val phone: String, val password: String, val is_rider_app: Boolean = true)
-data class RiderRegisterRequest(val name: String, val phone: String, val password: String, val service_zone: String)
-data class AcceptOrderRequest(val order_id: String, val rider_id: Int)
+data class RiderLoginRequest(@SerializedName("phone") val phone: String? = null, val password: String, val is_rider_app: Boolean = true)
+data class RiderRegisterRequest(@SerializedName("name") val name: String? = null, @SerializedName("phone") val phone: String? = null, val password: String, @SerializedName("service_zone") val service_zone: String? = null)
+data class AcceptOrderRequest(val order_id: String, val rider_id: String)
 data class UpdateOrderStatusRequest(val order_id: String, val status: String)
 
 // --- Retrofit Service ---
@@ -126,24 +162,43 @@ interface RiderApiService {
     @POST("routes.php?action=login")
     suspend fun login(@Body request: RiderLoginRequest): Response<GenericResponse<RiderAuthData>>
 
+    @Headers("Content-Type: application/json")
     @POST("routes.php?action=rider_register")
     suspend fun register(@Body request: RiderRegisterRequest): Response<GenericResponse<RiderAuthData>>
 
     @GET("routes.php?action=get_available_orders")
     suspend fun getAvailableOrders(@Query("zone") zone: String, @Query("rider_id") riderId: Int): Response<GenericResponse<List<RiderOrder>>>
     
+    @Headers("Content-Type: application/json")
     @POST("routes.php?action=reject_order")
-    suspend fun rejectOrder(@Body request: Map<String, Int>): Response<GenericResponse<Unit>>
+    suspend fun rejectOrder(@Body request: Map<String, String>): Response<GenericResponse<Unit>>
 
+    @Headers("Content-Type: application/json")
     @POST("routes.php?action=accept_order")
     suspend fun acceptOrder(@Body request: AcceptOrderRequest): Response<GenericResponse<Unit>>
 
     @GET("routes.php?action=get_rider_orders")
     suspend fun getRiderOrders(@Query("rider_id") riderId: Int): Response<GenericResponse<List<RiderOrder>>>
 
+    @Headers("Content-Type: application/json")
     @POST("routes.php?action=update_rider_profile")
     suspend fun updateProfile(@Body request: Map<String, String>): Response<GenericResponse<Unit>>
 
+    @GET("routes.php?action=get_chat_messages")
+    suspend fun getChatMessages(@Query("order_id") orderId: Int): retrofit2.Response<GenericResponse<List<ChatMessage>>>
+
+    @GET("routes.php?action=get_typing_status")
+    suspend fun getTypingStatus(@Query("order_id") orderId: Int, @Query("sender_type") senderType: String): retrofit2.Response<GenericResponse<TypingStatus>>
+
+    @Headers("Content-Type: application/json")
+    @POST("routes.php?action=update_typing_status")
+    suspend fun updateTypingStatus(@Body request: Map<String, String>): retrofit2.Response<GenericResponse<Unit>>
+
+    @Headers("Content-Type: application/json")
+    @POST("routes.php?action=send_chat_message")
+    suspend fun sendChatMessage(@Body requestBody: okhttp3.RequestBody): retrofit2.Response<GenericResponse<Any>>
+
+    @Headers("Content-Type: application/json")
     @POST("routes.php?action=update_order_status")
     suspend fun updateOrderStatus(@Body request: UpdateOrderStatusRequest): Response<GenericResponse<Unit>>
 }
@@ -152,7 +207,9 @@ object RetrofitClient {
     private const val BASE_URL = "https://snow.akfasft.com/api/"
     val gson = GsonBuilder().setLenient().create()
     
+    private val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
     private val client = OkHttpClient.Builder()
+        .addInterceptor(logging)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
@@ -188,43 +245,58 @@ object SessionManager {
 }
 
 class RiderViewModel : ViewModel() {
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading = _isLoading.asStateFlow()
-
-    private val _authError = MutableStateFlow<String?>(null)
-    val authError = _authError.asStateFlow()
+    private val _riderId = MutableStateFlow<Int>(-1)
+    val riderId: StateFlow<Int> = _riderId
     
-    private val _pendingApproval = MutableStateFlow(false)
-    val pendingApproval = _pendingApproval.asStateFlow()
-
-    private val _availableOrders = MutableStateFlow<List<RiderOrder>>(emptyList())
-    val availableOrders = _availableOrders.asStateFlow()
-
-    private val _myOrders = MutableStateFlow<List<RiderOrder>>(emptyList())
-    val myOrders = _myOrders.asStateFlow()
-
-    private val _riderId = MutableStateFlow(-1)
-    val riderId = _riderId.asStateFlow()
     private val _riderName = MutableStateFlow("")
-    val riderName = _riderName.asStateFlow()
+    val riderName: StateFlow<String> = _riderName
+    
     private val _riderPhone = MutableStateFlow("")
-    val riderPhone = _riderPhone.asStateFlow()
+    val riderPhone: StateFlow<String> = _riderPhone
+    
     private val _whatsappNumber = MutableStateFlow("")
-    val whatsappNumber = _whatsappNumber.asStateFlow()
+    val whatsappNumber: StateFlow<String> = _whatsappNumber
+    
     private val _riderZone = MutableStateFlow("")
-    val riderZone = _riderZone.asStateFlow()
+    val riderZone: StateFlow<String> = _riderZone
     
     private val _homeAddress = MutableStateFlow("")
-    val homeAddress = _homeAddress.asStateFlow()
+    val homeAddress: StateFlow<String> = _homeAddress
+    
     private val _bankName = MutableStateFlow("")
-    val bankName = _bankName.asStateFlow()
+    val bankName: StateFlow<String> = _bankName
+    
     private val _bankIban = MutableStateFlow("")
-    val bankIban = _bankIban.asStateFlow()
-
+    val bankIban: StateFlow<String> = _bankIban
+    
     private val _quickReply1 = MutableStateFlow("I am on my way!")
-    val quickReply1 = _quickReply1.asStateFlow()
+    val quickReply1: StateFlow<String> = _quickReply1
+    
     private val _quickReply2 = MutableStateFlow("I have arrived at the pickup location.")
-    val quickReply2 = _quickReply2.asStateFlow()
+    val quickReply2: StateFlow<String> = _quickReply2
+
+    private val _availableOrders = MutableStateFlow<List<RiderOrder>>(emptyList())
+    val availableOrders: StateFlow<List<RiderOrder>> = _availableOrders
+    
+    private val _myOrders = MutableStateFlow<List<RiderOrder>>(emptyList())
+    val myOrders: StateFlow<List<RiderOrder>> = _myOrders
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
+    
+    private val _authError = MutableStateFlow<String?>(null)
+    val authError: StateFlow<String?> = _authError
+
+    private val _pendingApproval = MutableStateFlow(false)
+    val pendingApproval: StateFlow<Boolean> = _pendingApproval
+    
+    sealed class PendingAction {
+        data class AcceptOrder(val orderId: String) : PendingAction()
+        data class RejectOrder(val orderId: String) : PendingAction()
+        data class UpdateOrderStatus(val orderId: String, val newStatus: String) : PendingAction()
+    }
+    
+    private val pendingActions = mutableListOf<PendingAction>()
 
     fun initSession(context: Context) {
         val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
@@ -238,46 +310,43 @@ class RiderViewModel : ViewModel() {
         _bankIban.value = prefs.getString("bank_iban", "") ?: ""
         _quickReply1.value = prefs.getString("quick_reply_1", "I am on my way!") ?: "I am on my way!"
         _quickReply2.value = prefs.getString("quick_reply_2", "I have arrived at the pickup location.") ?: "I have arrived at the pickup location."
+        
+        try {
+            val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val request = android.net.NetworkRequest.Builder()
+                .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            connectivityManager.registerNetworkCallback(request, object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    retryPendingActions(context)
+                }
+            })
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
-    private fun saveAuthData(context: Context, data: RiderAuthData) {
-        val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
-        prefs.edit().apply {
-            putInt("rider_id", data.id)
-            putString("rider_name", data.name)
-            putString("rider_phone", data.phone)
-            putString("whatsapp_number", data.whatsapp_number ?: "")
-            putString("rider_zones", data.service_zone)
-        }.apply()
-        initSession(context)
-    }
-    
-    fun saveProfileDetails(context: Context, address: String, bank: String, iban: String, qr1: String, qr2: String) {
-        val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
-        prefs.edit().apply {
-            putString("rider_address", address)
-            putString("bank_name", bank)
-            putString("bank_iban", iban)
-            putString("quick_reply_1", qr1)
-            putString("quick_reply_2", qr2)
-        }.apply()
-        initSession(context)
-        Toast.makeText(context, "Profile Updated", Toast.LENGTH_SHORT).show()
+    private fun retryPendingActions(context: Context) {
+        val actionsToRetry = pendingActions.toList()
+        pendingActions.clear()
+        actionsToRetry.forEach { action ->
+            when (action) {
+                is PendingAction.AcceptOrder -> acceptOrder(action.orderId, context)
+                is PendingAction.RejectOrder -> rejectOrder(action.orderId, context)
+                is PendingAction.UpdateOrderStatus -> updateOrderStatus(action.orderId, action.newStatus, context)
+            }
+        }
     }
 
-    fun logout(context: Context) {
-        val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
-        _riderId.value = -1
-    }
-
-    
     fun updateWhatsApp(context: Context, whatsapp: String) {
         val id = _riderId.value
-        if (id == -1) return
+        if (id == -1) {
+            _isLoading.value = false
+            return
+        }
         viewModelScope.launch {
-            _isLoading.value = true
             try {
+                _isLoading.value = true
                 val request = mapOf("rider_id" to id.toString(), "whatsapp_number" to whatsapp)
                 val response = RetrofitClient.apiService.updateProfile(request)
                 if (response.isSuccessful && response.body()?.status == "success") {
@@ -289,6 +358,7 @@ class RiderViewModel : ViewModel() {
                     Toast.makeText(context, response.body()?.message ?: "Failed to update profile", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
+                android.util.Log.e("API_ERROR", "Fetch failed", e)
                 Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show()
             } finally {
                 _isLoading.value = false
@@ -304,27 +374,27 @@ class RiderViewModel : ViewModel() {
         viewModelScope.launch {
             SessionManager.logout(context)
             _riderId.value = -1
-            _isLoading.value = true
             _authError.value = null
             try {
+                _isLoading.value = true
                 val res = RetrofitClient.apiService.login(RiderLoginRequest(phone, pass))
-                Log.d("API_RESPONSE", "Response: $res")
+                android.util.Log.d("API_RESPONSE", "Response: $res")
                 if (res.isSuccessful) {
                     val body = res.body()
-                    Log.d("API_RESPONSE", "Body: $body")
+                    android.util.Log.d("API_RESPONSE", "Body: $body")
                     if (body?.status == "success" && body.data != null) {
                         SessionManager.saveUser(context, body.data)
                         // Trigger initialization to load the session state in ViewModel
                         initSession(context)
                         onSuccess()
                     } else {
-                        _authError.value = body?.message ?: "Unknown error occurred"
+                        _authError.value = body?.message ?: "Invalid Credentials"
                     }
                 } else {
                     _authError.value = "Server error. Try again."
                 }
             } catch (e: Exception) {
-                Log.e("API_ERROR", "Error: ${e.message}")
+                android.util.Log.e("API_ERROR", "Fetch failed", e)
                 _authError.value = "Network Error. Please check connection."
             } finally {
                 _isLoading.value = false
@@ -334,10 +404,10 @@ class RiderViewModel : ViewModel() {
 
     fun register(name: String, phone: String, pass: String, zone: String, context: Context) {
         viewModelScope.launch {
-            _isLoading.value = true
             _authError.value = null
             _pendingApproval.value = false
             try {
+                _isLoading.value = true
                 val response = RetrofitClient.apiService.register(RiderRegisterRequest(name, phone, pass, zone))
                 if (response.isSuccessful) {
                     val body = response.body()
@@ -351,6 +421,7 @@ class RiderViewModel : ViewModel() {
                     _authError.value = "Server error. Try again."
                 }
             } catch (e: Exception) {
+                android.util.Log.e("API_ERROR", "Fetch failed", e)
                 _authError.value = "Network Error. Please check connection."
             } finally {
                 _isLoading.value = false
@@ -361,10 +432,13 @@ class RiderViewModel : ViewModel() {
     fun fetchAvailableOrders(context: Context) {
         val zone = _riderZone.value
         val riderId = _riderId.value
-        if (zone.isEmpty() || riderId == -1) return
+        if (zone.isEmpty() || riderId == -1) {
+            _isLoading.value = false
+            return
+        }
         viewModelScope.launch {
-            _isLoading.value = true
             try {
+                _isLoading.value = true
                 val response = RetrofitClient.apiService.getAvailableOrders(zone, riderId)
                 if (response.isSuccessful && response.body()?.status == "success") {
                     val newOrders = response.body()?.data ?: emptyList()
@@ -374,6 +448,7 @@ class RiderViewModel : ViewModel() {
                     Toast.makeText(context, response.body()?.message ?: "Failed to fetch orders", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
+                android.util.Log.e("API_ERROR", "Fetch failed", e)
                 Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show()
             } finally {
                 _isLoading.value = false
@@ -391,7 +466,7 @@ class RiderViewModel : ViewModel() {
                 viewModelScope.launch(Dispatchers.IO) {
                     val geocoder = Geocoder(context, Locale.getDefault())
                     val updatedOrders = orders.map { order ->
-                        val address = order.pickup_address
+                        val address = order.pickupAddress
                         if (!address.isNullOrEmpty()) {
                             try {
                                 val results = geocoder.getFromLocationName(address, 1)
@@ -418,10 +493,13 @@ class RiderViewModel : ViewModel() {
 
     fun fetchMyOrders(context: Context) {
         val id = _riderId.value
-        if (id == -1) return
+        if (id == -1) {
+            _isLoading.value = false
+            return
+        }
         viewModelScope.launch {
-            _isLoading.value = true
             try {
+                _isLoading.value = true
                 val response = RetrofitClient.apiService.getRiderOrders(id)
                 if (response.isSuccessful && response.body()?.status == "success") {
                     _myOrders.value = response.body()?.data ?: emptyList()
@@ -429,6 +507,7 @@ class RiderViewModel : ViewModel() {
                     Toast.makeText(context, response.body()?.message ?: "Failed to fetch history", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
+                android.util.Log.e("API_ERROR", "Fetch failed", e)
                 Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show()
             } finally {
                 _isLoading.value = false
@@ -438,11 +517,14 @@ class RiderViewModel : ViewModel() {
 
     fun acceptOrder(orderId: String, context: Context) {
         val id = _riderId.value
-        if (id == -1) return
+        if (id == -1) {
+            _isLoading.value = false
+            return
+        }
         viewModelScope.launch {
-            _isLoading.value = true
             try {
-                val response = RetrofitClient.apiService.acceptOrder(AcceptOrderRequest(orderId, id))
+                _isLoading.value = true
+                val response = RetrofitClient.apiService.acceptOrder(AcceptOrderRequest(orderId, id.toString()))
                 if (response.isSuccessful && response.body()?.status == "success") {
                     Toast.makeText(context, "Order Accepted!", Toast.LENGTH_SHORT).show()
                     fetchAvailableOrders(context)
@@ -450,20 +532,26 @@ class RiderViewModel : ViewModel() {
                     Toast.makeText(context, response.body()?.message ?: "Failed to accept order", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show()
+                android.util.Log.e("API_ERROR", "Fetch failed", e)
+                Toast.makeText(context, "Network Error. Order acceptance queued.", Toast.LENGTH_SHORT).show()
+                val action = PendingAction.AcceptOrder(orderId)
+                if (!pendingActions.contains(action)) pendingActions.add(action)
             } finally {
                 _isLoading.value = false
             }
         }
     }
 
-    fun rejectOrder(orderId: Int, context: Context) {
+    fun rejectOrder(orderId: String, context: Context) {
         val id = _riderId.value
-        if (id == -1) return
+        if (id == -1) {
+            _isLoading.value = false
+            return
+        }
         viewModelScope.launch {
-            _isLoading.value = true
             try {
-                val request = mapOf("order_id" to orderId, "rider_id" to id)
+                _isLoading.value = true
+                val request = mapOf("order_id" to orderId.toString(), "rider_id" to id.toString())
                 val response = RetrofitClient.apiService.rejectOrder(request)
                 if (response.isSuccessful && response.body()?.status == "success") {
                     Toast.makeText(context, "Order Rejected", Toast.LENGTH_SHORT).show()
@@ -472,7 +560,10 @@ class RiderViewModel : ViewModel() {
                     Toast.makeText(context, response.body()?.message ?: "Failed to reject order", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show()
+                android.util.Log.e("API_ERROR", "Fetch failed", e)
+                Toast.makeText(context, "Network Error. Order rejection queued.", Toast.LENGTH_SHORT).show()
+                val action = PendingAction.RejectOrder(orderId)
+                if (!pendingActions.contains(action)) pendingActions.add(action)
             } finally {
                 _isLoading.value = false
             }
@@ -482,6 +573,7 @@ class RiderViewModel : ViewModel() {
     fun updateOrderStatus(orderId: String, newStatus: String, context: Context) {
         viewModelScope.launch {
             try {
+                _isLoading.value = true
                 val response = RetrofitClient.apiService.updateOrderStatus(UpdateOrderStatusRequest(orderId, newStatus))
                 if (response.isSuccessful && response.body()?.status == "success") {
                     Toast.makeText(context, "Status updated to $newStatus", Toast.LENGTH_SHORT).show()
@@ -490,9 +582,36 @@ class RiderViewModel : ViewModel() {
                     Toast.makeText(context, response.body()?.message ?: "Failed to update status", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show()
+                android.util.Log.e("API_ERROR", "Fetch failed", e)
+                Toast.makeText(context, "Network Error. Status update queued.", Toast.LENGTH_SHORT).show()
+                val action = PendingAction.UpdateOrderStatus(orderId, newStatus)
+                if (!pendingActions.contains(action)) pendingActions.add(action)
+            } finally {
+                _isLoading.value = false
             }
         }
+    }
+    
+    fun saveProfileDetails(context: Context, address: String, bankName: String, bankIban: String, qr1: String, qr2: String) {
+        val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("rider_address", address)
+            putString("bank_name", bankName)
+            putString("bank_iban", bankIban)
+            putString("quick_reply_1", qr1)
+            putString("quick_reply_2", qr2)
+        }.apply()
+        _homeAddress.value = address
+        _bankName.value = bankName
+        _bankIban.value = bankIban
+        _quickReply1.value = qr1
+        _quickReply2.value = qr2
+        Toast.makeText(context, "Profile Saved Locally", Toast.LENGTH_SHORT).show()
+    }
+    
+    fun logout(context: Context) {
+        SessionManager.logout(context)
+        _riderId.value = -1
     }
 }
 
@@ -574,11 +693,11 @@ fun printReceipt(context: Context, order: RiderOrder) {
         <body>
             <div class="header">
                 <div class="title">Snowhite Captain</div>
-                <div class="subtitle">Receipt - Order #${order.order_id ?: "N/A"}</div>
+                <div class="subtitle">Receipt - Order #${order.orderId ?: "N/A"}</div>
             </div>
             <div class="details">
                 <p><strong>Date:</strong> ${order.date ?: "N/A"}</p>
-                <p><strong>Address:</strong> ${order.pickup_address ?: "N/A"}</p>
+                <p><strong>Address:</strong> ${order.pickupAddress ?: "N/A"}</p>
             </div>
             <table>
                 <tr>
@@ -588,7 +707,7 @@ fun printReceipt(context: Context, order: RiderOrder) {
                 $itemsHtml
             </table>
             <div class="total">
-                Total: PKR ${order.total_amount ?: "0"}
+                Total: PKR ${order.totalAmount ?: "0"}
             </div>
         </body>
         </html>
@@ -596,8 +715,8 @@ fun printReceipt(context: Context, order: RiderOrder) {
     
     webView.webViewClient = object : android.webkit.WebViewClient() {
         override fun onPageFinished(view: android.webkit.WebView, url: String) {
-            val printAdapter = view.createPrintDocumentAdapter("Receipt_${order.order_id}")
-            printManager.print("Receipt_${order.order_id}", printAdapter, android.print.PrintAttributes.Builder().build())
+            val printAdapter = view.createPrintDocumentAdapter("Receipt_${order.orderId}")
+            printManager.print("Receipt_${order.orderId}", printAdapter, android.print.PrintAttributes.Builder().build())
         }
     }
     
@@ -797,11 +916,15 @@ fun RegisterScreen(viewModel: RiderViewModel, onNavigateToLogin: () -> Unit) {
 @Composable
 fun MainAppScreen(viewModel: RiderViewModel) {
     val navController = rememberNavController()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
+            if (currentRoute != null && !currentRoute.startsWith("chat/")) {
+                NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
+
                 
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Radar, contentDescription = "Radar") },
@@ -825,13 +948,38 @@ fun MainAppScreen(viewModel: RiderViewModel) {
                     colors = NavigationBarItemDefaults.colors(selectedIconColor = TealAccent, selectedTextColor = TealAccent)
                 )
             }
+            }
         }
     ) { padding ->
-        NavHost(navController = navController, startDestination = "radar", modifier = Modifier.padding(padding)) {
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            NavHost(navController = navController, startDestination = "radar", modifier = Modifier.fillMaxSize()) {
             composable("radar") { RadarScreen(viewModel) }
-            composable("history") { HistoryScreen(viewModel) }
-            composable("profile") { ProfileScreen(viewModel) }
+            composable("history") { HistoryScreen(viewModel, navController) }
+                        composable("wallet") { WalletScreen(viewModel) }
+            composable("chat/{orderId}") { backStackEntry ->
+                val orderId = backStackEntry.arguments?.getString("orderId")?.toIntOrNull() ?: 0
+                val riderId by viewModel.riderId.collectAsState()
+                OrderChatScreen(
+                    orderId = orderId,
+                    mySenderType = "rider",
+                    mySenderId = riderId,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("profile") { ProfileScreen(viewModel, navController) }
+            composable("quickReplies") { QuickRepliesScreen(viewModel, navController) }
         }
+        
+        androidx.compose.animation.AnimatedVisibility(
+            visible = isLoading,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut()
+        ) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.5f)).pointerInput(Unit) { detectTapGestures { } }, contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF00B4D8))
+            }
+        }
+    }
     }
 }
 
@@ -859,360 +1007,268 @@ fun RadarScreen(viewModel: RiderViewModel) {
     val isLoading by viewModel.isLoading.collectAsState()
 
     var selectedOrderForReview by remember { mutableStateOf<RiderOrder?>(null) }
+    val radarSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var sortOption by remember { mutableStateOf("Newest") }
     var expandedSortMenu by remember { mutableStateOf(false) }
     
     val sortedOrders = remember(orders, sortOption) {
         when (sortOption) {
-            "Total Amount" -> orders.sortedByDescending { it.total_amount?.toDoubleOrNull() ?: 0.0 }
+            "Total Amount" -> orders.sortedByDescending { it.totalAmount?.toDoubleOrNull() ?: 0.0 }
             "Proximity" -> orders.sortedBy { it.distanceInMeters ?: Float.MAX_VALUE }
             "Hub" -> orders.sortedBy { it.zone ?: "" }
-            else -> orders.sortedByDescending { it.order_id ?: 0 }
+            else -> orders.sortedByDescending { it.orderId?.toIntOrNull() ?: 0 }
         }
     }
-
-    val infiniteTransition = rememberInfiniteTransition()
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulsingDot"
-    )
 
     LaunchedEffect(Unit) {
         viewModel.fetchAvailableOrders(context)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        AsyncImage(
-            model = "https://images.unsplash.com/photo-1545060894-7b57f0f6c271?q=80&w=1000",
-            contentDescription = "Laundry Background",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
-        Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.85f)))
-        
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Premium Delivery Header
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF03045E)),
-                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+    // Clean Layout Hierarchy: No Overlapping Full-Size Boxes
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF5F6FA))) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Premium Delivery Header
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF03045E)),
+            shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Radar Active",
+                        color = Color.LightGray,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Searching in:",
+                        color = Color.LightGray,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        zone.uppercase(),
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 20.sp,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                IconButton(
+                    onClick = { viewModel.fetchAvailableOrders(context) },
+                    modifier = Modifier.background(Color(0xFF00B4D8), CircleShape).size(48.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .background(Color.Green.copy(alpha = alpha), CircleShape)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                "Radar Active",
-                                color = Color.LightGray,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Searching in:",
-                            color = Color.LightGray,
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            zone.uppercase(),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 20.sp,
-                            color = Color.White,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    IconButton(
-                        onClick = { viewModel.fetchAvailableOrders(context) },
-                        modifier = Modifier.background(Color(0xFF00B4D8), CircleShape).size(48.dp)
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
+                }
+            }
+        }
+        
+        if (orders.isEmpty() && !isLoading) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.Search, 
+                        contentDescription = "Empty", 
+                        tint = Color.Gray.copy(alpha = 0.5f), 
+                        modifier = Modifier.size(80.dp)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "No new orders right now.\nKeep your radar on!", 
+                        color = Color.DarkGray, 
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else if (!isLoading) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "${sortedOrders.size} Available",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.DarkGray,
+                    fontSize = 16.sp
+                )
+                Box {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White,
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.clickable { expandedSortMenu = true }
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.FilterList, contentDescription = "Sort", tint = Color(0xFF03045E), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(sortOption, color = Color(0xFF03045E), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = expandedSortMenu,
+                        onDismissRequest = { expandedSortMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Newest") },
+                            onClick = { sortOption = "Newest"; expandedSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Total Amount") },
+                            onClick = { sortOption = "Total Amount"; expandedSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Proximity") },
+                            onClick = { sortOption = "Proximity"; expandedSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Hub (Zone)") },
+                            onClick = { sortOption = "Hub"; expandedSortMenu = false }
+                        )
                     }
                 }
             }
             
-            if (isLoading && orders.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    SophisticatedLoadingIndicator()
-                }
-            } else if (orders.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.Search, 
-                            contentDescription = "Empty", 
-                            tint = Color.Gray.copy(alpha = 0.5f), 
-                            modifier = Modifier.size(80.dp)
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "No new orders right now.\nKeep your radar on!", 
-                            color = Color.DarkGray, 
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(24.dp))
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "${sortedOrders.size} Available",
-                        fontWeight = FontWeight.Bold,
-                        color = Color.DarkGray,
-                        fontSize = 16.sp
-                    )
-                    Box {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFFF0F4F8),
-                            modifier = Modifier.clickable { expandedSortMenu = true }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.FilterList, contentDescription = "Sort", tint = Color(0xFF03045E), modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(sortOption, color = Color(0xFF03045E), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Spacer(Modifier.width(4.dp))
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Drop", tint = Color(0xFF03045E))
-                            }
-                        }
-                        DropdownMenu(
-                            expanded = expandedSortMenu,
-                            onDismissRequest = { expandedSortMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Newest") },
-                                onClick = { sortOption = "Newest"; expandedSortMenu = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Total Amount") },
-                                onClick = { sortOption = "Total Amount"; expandedSortMenu = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Proximity") },
-                                onClick = { sortOption = "Proximity"; expandedSortMenu = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Hub (Zone)") },
-                                onClick = { sortOption = "Hub"; expandedSortMenu = false }
-                            )
-                        }
-                    }
-                }
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(sortedOrders, key = { it.order_id ?: it.hashCode() }) { order ->
-                        val alpha = remember { Animatable(0f) }
-                        val translateY = remember { Animatable(50f) }
-                        
-                        LaunchedEffect(order.order_id) {
-                            launch { alpha.animateTo(1f, animationSpec = tween(400)) }
-                            launch { translateY.animateTo(0f, animationSpec = tween(400, easing = FastOutSlowInEasing)) }
-                        }
-                        
-                        Card(
-                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                    this.alpha = alpha.value
-                                    this.translationY = translateY.value
-                                }
-                                .clickable { selectedOrderForReview = order }
-                        ) {
-                            Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-                                // Subtle Left Border
-                                Box(
-                                    modifier = Modifier
-                                        .width(6.dp)
-                                        .fillMaxHeight()
-                                        .background(Color(0xFF03045E))
-                                )
-                                Column(modifier = Modifier.padding(16.dp).weight(1f)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            "Order #${order.order_id}",
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = Color(0xFF03045E),
-                                            fontSize = 18.sp
-                                        )
-                                        Text(
-                                            "PKR ${order.total_amount ?: "0"}",
-                                            color = Color(0xFF00B4D8),
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 18.sp
-                                        )
-                                    }
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.DateRange,
-                                            contentDescription = "Date",
-                                            tint = Color.Gray,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            order.date ?: "Just now",
-                                            color = Color.DarkGray,
-                                            fontSize = 14.sp
-                                        )
-                                    }
-                                    Spacer(Modifier.height(6.dp))
-                                    Row(verticalAlignment = Alignment.Top) {
-                                        Icon(
-                                            Icons.Default.LocationOn,
-                                            contentDescription = "Location",
-                                            tint = Color.Gray,
-                                            modifier = Modifier.size(16.dp).padding(top = 2.dp)
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            order.pickup_address ?: "N/A",
-                                            color = Color.DarkGray,
-                                            fontSize = 14.sp,
-                                            lineHeight = 20.sp
-                                        )
-                                    }
-                                    Spacer(Modifier.height(16.dp))
-                                    Button(
-                                        onClick = { selectedOrderForReview = order },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        contentPadding = PaddingValues(vertical = 14.dp)
-                                    ) {
-                                        Text("REVIEW ORDER", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (selectedOrderForReview != null) {
-            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            ModalBottomSheet(
-                onDismissRequest = { selectedOrderForReview = null },
-                sheetState = sheetState,
-                containerColor = Color.White
+            // Clean 2-column Grid Layout
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth()
             ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp)) {
-                    Text("Order #${selectedOrderForReview!!.order_id}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03045E))
-                    Spacer(Modifier.height(8.dp))
-                    Text("Total Amount: PKR ${selectedOrderForReview!!.total_amount ?: "0"}", color = Color(0xFF00B4D8), fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(24.dp))
-                    
-                    val orderItems = selectedOrderForReview!!.items
-                    if (!orderItems.isNullOrEmpty()) {
-                        Text("Order Items", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03045E))
-                        Spacer(Modifier.height(8.dp))
-                        LazyColumn(
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 250.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(orderItems) { item ->
-                                ListItem(
-                                    colors = ListItemDefaults.colors(containerColor = Color(0xFFF8F9FA)),
-                                    headlineContent = { Text(item.name ?: "Unknown Item", fontWeight = FontWeight.Medium, color = Color(0xFF03045E)) },
-                                    leadingContent = { 
-                                        Box(
-                                            modifier = Modifier.background(Color(0xFF00B4D8).copy(alpha = 0.2f), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("${item.quantity ?: 1}x", color = Color(0xFF00B4D8), fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                )
+                items(
+                    items = sortedOrders,
+                    key = { it.orderId ?: 0 }
+                ) { order ->
+                    Card(
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().clickable { selectedOrderForReview = order }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
+                            Text(
+                                "Order #${order.orderId}",
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF03045E),
+                                fontSize = 14.sp
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "PKR ${order.totalAmount ?: "0"}",
+                                color = Color(0xFF00B4D8),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.DateRange, contentDescription = "Date", tint = Color.Gray, modifier = Modifier.size(12.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(order.date ?: "Just now", color = Color.DarkGray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                        }
-                        Spacer(Modifier.height(24.dp))
-                    } else {
-                        Text("No items listed.", color = Color.Gray)
-                        Spacer(Modifier.height(24.dp))
-                    }
-                    
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Button(
-                            onClick = { 
-                                val orderId = selectedOrderForReview!!.order_id
-                                if (orderId != null) {
-                                    viewModel.rejectOrder(orderId, context)
-                                }
-                                selectedOrderForReview = null
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                            border = BorderStroke(1.dp, Color.Red),
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(vertical = 14.dp)
-                        ) {
-                            Text("REJECT", color = Color.Red, fontWeight = FontWeight.Bold)
-                        }
-                        
-                        Button(
-                            onClick = { 
-                                val orderIdStr = selectedOrderForReview!!.order_id?.toString() ?: ""
-                                viewModel.acceptOrder(orderIdStr, context)
-                                selectedOrderForReview = null
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(vertical = 14.dp)
-                        ) {
-                            Text("ACCEPT", color = Color.White, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.Top) {
+                                Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = Color.Gray, modifier = Modifier.size(12.dp).padding(top = 2.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(order.pickupAddress ?: "N/A", color = Color.DarkGray, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Button(
+                                onClick = { selectedOrderForReview = order },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(vertical = 8.dp)
+                            ) {
+                                Text("REVIEW", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
                         }
                     }
                 }
             }
         }
     }
+    } // End of Column, still inside Box
+
+    if (selectedOrderForReview != null) {
+        ModalBottomSheet(
+            onDismissRequest = { selectedOrderForReview = null },
+            sheetState = radarSheetState,
+            containerColor = Color.White,
+            modifier = Modifier.fillMaxHeight(0.9f)
+        ) {
+            OrderDetailsSheetContent(
+                order = selectedOrderForReview!!,
+                isHistory = false,
+                onAccept = {
+                    viewModel.acceptOrder(selectedOrderForReview!!.orderId.toString(), context)
+                    selectedOrderForReview = null
+                },
+                onReject = {
+                    viewModel.rejectOrder(selectedOrderForReview!!.orderId ?: "", context)
+                    selectedOrderForReview = null
+                }
+            )
+        }
+    }
+}
+
+
+
+
+
+@Composable
+fun StatusBadge(status: String) {
+    val formattedStatus = status.replace("_", " ")
+        .lowercase()
+        .split(" ")
+        .joinToString(" ") { it.replaceFirstChar { char -> char.uppercase() } }
+    
+    val (bgColor, textColor) = when (status.uppercase()) {
+        "DELIVERED" -> Color(0xFFE8F5E9) to Color(0xFF2E7D32)
+        "OUT_FOR_DELIVERY" -> Color(0xFFE3F2FD) to Color(0xFF1565C0)
+        "IN_WASHING", "RECEIVED_AT_HUB" -> Color(0xFFFFF3E0) to Color(0xFFEF6C00)
+        "COLLECTING", "PENDING" -> Color(0xFFEDE7F6) to Color(0xFF4527A0)
+        else -> Color(0xFFF5F5F5) to Color(0xFF616161)
+    }
+
+    Box(
+        modifier = Modifier
+            .background(bgColor, RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = formattedStatus,
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(viewModel: RiderViewModel) {
+fun HistoryScreen(viewModel: RiderViewModel, navController: androidx.navigation.NavController) {
     val context = LocalContext.current
     val orders by viewModel.myOrders.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     
     var selectedOrderForUpdate by remember { mutableStateOf<RiderOrder?>(null) }
+    val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showStatusDialogForOrder by remember { mutableStateOf<RiderOrder?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.fetchMyOrders(context)
@@ -1228,11 +1284,7 @@ fun HistoryScreen(viewModel: RiderViewModel) {
         Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.92f)))
         
         Column(modifier = Modifier.fillMaxSize()) {
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFF00B4D8))
-                }
-            } else if (orders.isEmpty()) {
+            if (orders.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.HourglassEmpty, contentDescription = "Empty", tint = Color.LightGray, modifier = Modifier.size(64.dp))
@@ -1244,35 +1296,49 @@ fun HistoryScreen(viewModel: RiderViewModel) {
                 LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
                     items(orders) { order ->
                         val currentStatus = order.status ?: "Pending"
-                        Card(
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), 
-                            colors = CardDefaults.cardColors(containerColor = Color.White), 
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.clickable { selectedOrderForUpdate = order }
+                        androidx.compose.material3.ElevatedCard(
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp), 
+                            colors = CardDefaults.elevatedCardColors(containerColor = Color.White), 
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth().clickable { selectedOrderForUpdate = order }
                         ) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Order #${order.order_id}", fontWeight = FontWeight.Bold, color = Color(0xFF03045E), fontSize = 16.sp)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text("PKR ${order.total_amount ?: "0"}", color = Color(0xFF00B4D8), fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.height(8.dp))
-                                    Text("Status: $currentStatus", color = Color.Gray, fontSize = 14.sp)
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    IconButton(
-                                        onClick = { printReceipt(context, order) },
-                                        modifier = Modifier.background(SoftWhite, RoundedCornerShape(8.dp))
-                                    ) {
-                                        Icon(androidx.compose.material.icons.Icons.Default.Print, contentDescription = "Print", tint = Color(0xFF03045E))
+                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                                    Column {
+                                        Text("Order #${order.orderId}", fontWeight = FontWeight.Bold, color = Color(0xFF03045E), fontSize = 16.sp)
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(order.date ?: "N/A", color = Color.Gray, fontSize = 12.sp)
                                     }
-                                    Spacer(Modifier.height(12.dp))
-                                    Button(
-                                        onClick = { selectedOrderForUpdate = order },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    Text("PKR ${order.totalAmount ?: "0"}", color = Color(0xFF00B4D8), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                                }
+                                
+                                Spacer(Modifier.height(12.dp))
+                                StatusBadge(status = currentStatus)
+                                Spacer(Modifier.height(16.dp))
+                                
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Button(
+                                            onClick = { showStatusDialogForOrder = order },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                        ) {
+                                            Text("Update Status", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                        }
+                                        androidx.compose.material3.OutlinedButton(
+                                            onClick = { selectedOrderForUpdate = order },
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                        ) {
+                                            Text("View Details", fontSize = 12.sp, color = Color(0xFF03045E))
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = { navController.navigate("chat/${order.orderId}") },
+                                        modifier = Modifier.background(Color(0xFFE3F2FD), androidx.compose.foundation.shape.CircleShape).size(40.dp)
                                     ) {
-                                        Text("Update", fontSize = 12.sp, color = Color.White)
+                                        Icon(androidx.compose.material.icons.Icons.Default.Email, contentDescription = "Chat", tint = Color(0xFF1565C0), modifier = Modifier.size(20.dp))
                                     }
                                 }
                             }
@@ -1282,95 +1348,63 @@ fun HistoryScreen(viewModel: RiderViewModel) {
             }
         }
         
+        if (showStatusDialogForOrder != null) {
+            val order = showStatusDialogForOrder!!
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showStatusDialogForOrder = null },
+                title = { Text("Update Order #${order.orderId}", fontWeight = FontWeight.Bold, color = Color(0xFF03045E)) },
+                text = {
+                    Column {
+                        val statuses = listOf("RECEIVED_AT_HUB", "IN_WASHING", "OUT_FOR_DELIVERY", "DELIVERED")
+                        statuses.forEach { status ->
+                            Button(
+                                onClick = { 
+                                    viewModel.updateOrderStatus(order.orderId.toString(), status, context)
+                                    showStatusDialogForOrder = null
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(status, color = Color.White)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showStatusDialogForOrder = null }) {
+                        Text("Cancel", color = Color.Gray)
+                    }
+                },
+                containerColor = Color.White
+            )
+        }
+
         if (selectedOrderForUpdate != null) {
-            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
             ModalBottomSheet(
                 onDismissRequest = { selectedOrderForUpdate = null },
-                sheetState = sheetState,
+                sheetState = historySheetState,
                 containerColor = Color.White
             ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column {
-                            Text("Update Order Status", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03045E))
-                            Spacer(Modifier.height(8.dp))
-                            Text("Order #${selectedOrderForUpdate!!.order_id}", color = Color.Gray)
-                        }
-                        IconButton(onClick = { printReceipt(context, selectedOrderForUpdate!!) }) {
-                            Icon(androidx.compose.material.icons.Icons.Default.Print, contentDescription = "Print Receipt", tint = Color(0xFF00B4D8))
-                        }
+                OrderDetailsSheetContent(
+                    order = selectedOrderForUpdate!!,
+                    isHistory = true,
+                    onUpdateStatus = { nextStatus ->
+                        viewModel.updateOrderStatus(selectedOrderForUpdate!!.orderId.toString(), nextStatus, context)
+                        selectedOrderForUpdate = null
+                    },
+                    onPrint = { printReceipt(context, selectedOrderForUpdate!!) },
+                    onChat = {
+                        navController.navigate("chat/${selectedOrderForUpdate!!.orderId}")
                     }
-                    Spacer(Modifier.height(24.dp))
-                    
-                    val orderItems = selectedOrderForUpdate!!.items
-                    if (!orderItems.isNullOrEmpty()) {
-                        Text("Order Items", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03045E))
-                        Spacer(Modifier.height(8.dp))
-                        LazyColumn(
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 250.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(orderItems) { item ->
-                                ListItem(
-                                    colors = ListItemDefaults.colors(containerColor = SoftWhite),
-                                    headlineContent = { Text(item.name ?: "Unknown Item", fontWeight = FontWeight.Medium, color = Color(0xFF03045E)) },
-                                    leadingContent = { 
-                                        Box(
-                                            modifier = Modifier.background(Color(0xFF00B4D8).copy(alpha = 0.2f), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("${item.quantity ?: 1}x", color = Color(0xFF00B4D8), fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(24.dp))
-                    }
-                    
-                    Text("Select New Status", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03045E))
-                    Spacer(Modifier.height(16.dp))
-                    
-                    val statuses = listOf("Pending", "Accepted", "Out for Pickup", "Picked Up", "Washing", "Ready for Delivery", "Out for Delivery", "Delivered")
-                    var expandedStatus by remember { mutableStateOf(false) }
-                    
-                    ExposedDropdownMenuBox(
-                        expanded = expandedStatus,
-                        onExpandedChange = { expandedStatus = it }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedOrderForUpdate!!.status ?: "Pending",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Status") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedStatus) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF00B4D8))
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expandedStatus,
-                            onDismissRequest = { expandedStatus = false }
-                        ) {
-                            statuses.forEach { st ->
-                                DropdownMenuItem(
-                                    text = { Text(st) },
-                                    onClick = { 
-                                        viewModel.updateOrderStatus(selectedOrderForUpdate!!.order_id?.toString() ?: "", st, context)
-                                        expandedStatus = false
-                                        selectedOrderForUpdate = null
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
+                )
             }
         }
     }
 }
 
 @Composable
-fun ProfileScreen(viewModel: RiderViewModel) {
+fun ProfileScreen(viewModel: RiderViewModel, navController: NavHostController) {
     val context = LocalContext.current
     val name by viewModel.riderName.collectAsState()
     val zone by viewModel.riderZone.collectAsState()
@@ -1379,8 +1413,7 @@ fun ProfileScreen(viewModel: RiderViewModel) {
     var bankName by remember { mutableStateOf(viewModel.bankName.value) }
     var bankIban by remember { mutableStateOf(viewModel.bankIban.value) }
     var whatsapp by remember { mutableStateOf(if (viewModel.whatsappNumber.value.isNotEmpty()) viewModel.whatsappNumber.value else viewModel.riderPhone.value) }
-    var qr1 by remember { mutableStateOf(viewModel.quickReply1.value) }
-    var qr2 by remember { mutableStateOf(viewModel.quickReply2.value) }
+
 
     Box(modifier = Modifier.fillMaxSize()) {
         AsyncImage(model = "https://images.pexels.com/photos/5591581/pexels-photo-5591581.jpeg?auto=compress&cs=tinysrgb&w=1080", contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -1446,41 +1479,21 @@ fun ProfileScreen(viewModel: RiderViewModel) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 
-                                Spacer(Modifier.height(16.dp))
-                Text("WhatsApp Quick Replies", color = DarkBlue, fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = qr1,
-                    onValueChange = { qr1 = it },
-                    label = { Text("Quick Reply 1 (e.g. On my way)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = {
-                        IconButton(onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/?text=${Uri.encode(qr1)}"))
-                            try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "WhatsApp not installed", Toast.LENGTH_SHORT).show() }
-                        }) {
-                            Icon(Icons.Default.Send, contentDescription = "Send", tint = Color(0xFF25D366))
-                        }
-                    }
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = qr2,
-                    onValueChange = { qr2 = it },
-                    label = { Text("Quick Reply 2 (e.g. Arrived)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = {
-                        IconButton(onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/?text=${Uri.encode(qr2)}"))
-                            try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "WhatsApp not installed", Toast.LENGTH_SHORT).show() }
-                        }) {
-                            Icon(Icons.Default.Send, contentDescription = "Send", tint = Color(0xFF25D366))
-                        }
-                    }
-                )
+                Spacer(Modifier.height(16.dp))
+                Text("App Settings", color = DarkBlue, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = { navController.navigate("quickReplies") },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE3F2FD), contentColor = DarkBlue)
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Manage Quick Replies", fontWeight = FontWeight.Medium)
+                }
                 
                 Spacer(Modifier.height(16.dp))
                 Button(
-                    onClick = { viewModel.saveProfileDetails(context, address, bankName, bankIban, qr1, qr2)
+                    onClick = { viewModel.saveProfileDetails(context, address, bankName, bankIban, viewModel.quickReply1.value, viewModel.quickReply2.value)
                         viewModel.updateWhatsApp(context, whatsapp) },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = TealAccent)
@@ -1541,6 +1554,7 @@ class MainActivity : ComponentActivity() {
         )
 
         enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             RiderTheme {
                 val viewModel: RiderViewModel = viewModel()
@@ -1635,5 +1649,73 @@ fun SophisticatedLoadingIndicator() {
             fontSize = 16.sp,
             modifier = Modifier.graphicsLayer { alpha = if (scale < 1f) scale else 2f - scale }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QuickRepliesScreen(viewModel: RiderViewModel, navController: NavHostController) {
+    val context = LocalContext.current
+    val qr1State = viewModel.quickReply1.collectAsState()
+    val qr2State = viewModel.quickReply2.collectAsState()
+    var qr1 by remember { mutableStateOf(qr1State.value) }
+    var qr2 by remember { mutableStateOf(qr2State.value) }
+
+    
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Quick Replies", fontWeight = FontWeight.Bold, color = DarkBlue) },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DarkBlue)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(SoftWhite)
+                .padding(padding)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                "Save custom message templates to use in the order chat or send via WhatsApp.",
+                color = Color.Gray,
+                fontSize = 14.sp
+            )
+            
+            OutlinedTextField(
+                value = qr1,
+                onValueChange = { qr1 = it },
+                label = { Text("Quick Reply 1 (e.g. On my way)") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+            OutlinedTextField(
+                value = qr2,
+                onValueChange = { qr2 = it },
+                label = { Text("Quick Reply 2 (e.g. Arrived)") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+            
+            Spacer(Modifier.weight(1f))
+            Button(
+                onClick = { 
+                    viewModel.saveProfileDetails(context, viewModel.homeAddress.value, viewModel.bankName.value, viewModel.bankIban.value, qr1, qr2)
+                    Toast.makeText(context, "Quick Replies Saved", Toast.LENGTH_SHORT).show()
+                    navController.popBackStack()
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = TealAccent)
+            ) {
+                Text("Save Templates", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }

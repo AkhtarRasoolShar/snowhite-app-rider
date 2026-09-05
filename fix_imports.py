@@ -1,23 +1,21 @@
-with open('app/src/main/java/com/example/MainActivity.kt', 'r') as f:
-    lines = f.readlines()
+import re
 
-new_lines = []
-for line in lines:
-    if line.startswith("import retrofit2.http.Headers"): continue
-    if line.startswith("import android.util.Log"): continue
-    if line.startswith("import androidx.navigation.NavController") and not "compose" in line: continue
-    if line.startswith("import androidx.navigation.NavHostController") and not "compose" in line: continue
-    new_lines.append(line)
+with open("app/src/main/java/com/example/ChatViewModel.kt", "r") as f:
+    content = f.read()
 
-final_lines = []
-for line in new_lines:
-    final_lines.append(line)
-    if line.startswith("package com.example"):
-        final_lines.append("import retrofit2.http.Headers\n")
-        final_lines.append("import android.util.Log\n")
-        final_lines.append("import androidx.navigation.NavController\n")
-        final_lines.append("import androidx.navigation.NavHostController\n")
+# Fix the broken import at the very beginning
+if content.startswith("import okhttp3.MediaType.Companion.toMediaTypeOrNull\nimport okhttp3.RequestBody.Companion.toRequestBody\npackage com.example"):
+    content = content.replace(
+        "import okhttp3.MediaType.Companion.toMediaTypeOrNull\nimport okhttp3.RequestBody.Companion.toRequestBody\npackage com.example",
+        "package com.example\n\nimport okhttp3.MediaType.Companion.toMediaTypeOrNull\nimport okhttp3.RequestBody.Companion.toRequestBody\n"
+    )
+elif content.startswith("import "):
+    # Generally fix if it starts with import but has package later
+    match = re.search(r"^(.*?)(package com.example.*?)$", content, re.DOTALL)
+    if match:
+        imports = match.group(1)
+        rest = match.group(2)
+        content = rest.replace("package com.example", "package com.example\n" + imports)
 
-with open('app/src/main/java/com/example/MainActivity.kt', 'w') as f:
-    f.writelines(final_lines)
-
+with open("app/src/main/java/com/example/ChatViewModel.kt", "w") as f:
+    f.write(content)
