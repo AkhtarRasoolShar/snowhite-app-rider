@@ -1,57 +1,73 @@
-import re
-
-with open('app/src/main/java/com/example/MainActivity.kt', 'r') as f:
+with open("app/src/main/java/com/example/MainActivity.kt", "r") as f:
     content = f.read()
 
-# Update ViewModel State
-if "_whatsappNumber" not in content:
-    content = content.replace(
-        "val riderPhone = _riderPhone.asStateFlow()",
-        "val riderPhone = _riderPhone.asStateFlow()\n    private val _whatsappNumber = MutableStateFlow(\"\")\n    val whatsappNumber = _whatsappNumber.asStateFlow()"
-    )
+import re
 
-# Update initSession
-if "prefs.getString(\"whatsapp_number\"" not in content:
-    content = content.replace(
-        "_riderPhone.value = prefs.getString(\"rider_phone\", \"\") ?: \"\"",
-        "_riderPhone.value = prefs.getString(\"rider_phone\", \"\") ?: \"\"\n        _whatsappNumber.value = prefs.getString(\"whatsapp_number\", \"\") ?: \"\""
-    )
+# Add state variables inside RiderViewModel
+vm_start = content.find("class RiderViewModel : ViewModel() {")
+if vm_start != -1:
+    insertion_point = content.find("\n", vm_start) + 1
+    new_vars = '''
+    var email by androidx.compose.runtime.mutableStateOf("")
+    var availableHubs by androidx.compose.runtime.mutableStateOf<List<Hub>>(emptyList())
+    var selectedHubs by androidx.compose.runtime.mutableStateOf<Set<String>>(emptySet())
+    var appSettings by androidx.compose.runtime.mutableStateOf(AppSettings())
 
-# Update saveAuthData
-if "putString(\"whatsapp_number\"" not in content:
-    content = content.replace(
-        "putString(\"rider_phone\", data.phone)",
-        "putString(\"rider_phone\", data.phone)\n            putString(\"whatsapp_number\", data.whatsapp_number ?: \"\")"
-    )
+    init {
+        fetchHubs()
+    }
 
-# Add updateWhatsApp method to ViewModel
-if "fun updateWhatsApp" not in content:
-    update_whatsapp_code = """
-    fun updateWhatsApp(context: Context, whatsapp: String) {
-        val id = _riderId.value
-        if (id == -1) return
-        viewModelScope.launch {
-            _isLoading.value = true
+    private fun fetchHubs() {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val request = mapOf("rider_id" to id.toString(), "whatsapp_number" to whatsapp)
-                val response = RetrofitClient.apiService.updateProfile(request)
-                if (response.isSuccessful && response.body()?.status == "success") {
-                    val prefs = context.getSharedPreferences("RiderPrefs", Context.MODE_PRIVATE)
-                    prefs.edit().putString("whatsapp_number", whatsapp).apply()
-                    _whatsappNumber.value = whatsapp
-                    Toast.makeText(context, "Profile Updated!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, response.body()?.message ?: "Failed to update profile", Toast.LENGTH_SHORT).show()
+                val response = RetrofitClient.apiService.getHubs()
+                if (response.isSuccessful) {
+                    val data = response.body()?.data
+                    if (data != null) {
+                        availableHubs = data
+                    }
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show()
+                android.util.Log.e("API_ERROR", "Failed to fetch hubs", e)
+            }
+        }
+    }
+'''
+    if "var availableHubs by" not in content:
+        content = content[:insertion_point] + new_vars + content[insertion_point:]
+
+# Update the register function in RiderViewModel
+# The old signature: fun register(name: String, phone: String, pass: String, zone: String, context: Context)
+old_register_regex = r'fun register\(name: String, phone: String, pass: String, zone: String, context: Context\) \{.*?(?=fun fetchAvailableOrders)'
+new_register_str = '''fun register(name: String, phone: String, pass: String, zones: List<String>, email: String, context: Context) {
+        viewModelScope.launch {
+            _authError.value = null
+            _pendingApproval.value = false
+            try {
+                _isLoading.value = true
+                val response = RetrofitClient.apiService.register(RiderRegisterRequest(name, phone, pass, zones, email))
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    if (body?.status == "success" && body.data != null) {
+                        _pendingApproval.value = true
+                        _authError.value = "Registration Successful. Awaiting Admin Approval."
+                    } else {
+                        _authError.value = body?.message ?: "Registration Failed."
+                    }
+                } else {
+                    _authError.value = "Server error. Try again."
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("API_ERROR", "Fetch failed", e)
+                _authError.value = "Network Error. Please check connection."
             } finally {
                 _isLoading.value = false
             }
         }
     }
-"""
-    content = content.replace("fun clearError() {", update_whatsapp_code + "\n    fun clearError() {")
 
-with open('app/src/main/java/com/example/MainActivity.kt', 'w') as f:
+    '''
+content = re.sub(old_register_regex, new_register_str, content, flags=re.DOTALL)
+
+with open("app/src/main/java/com/example/MainActivity.kt", "w") as f:
     f.write(content)

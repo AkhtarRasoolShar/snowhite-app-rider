@@ -1,17 +1,20 @@
-with open('app/src/main/java/com/example/ChatUI.kt', 'r') as f:
-    chatui = f.read()
+import re
 
-chatui = chatui.replace("text = msg.status,", "text = msg.status ?: \"\",")
+with open("app/src/main/java/com/example/MainActivity.kt", "r") as f:
+    content = f.read()
 
-with open('app/src/main/java/com/example/ChatUI.kt', 'w') as f:
-    f.write(chatui)
+content = content.replace("Modifier.fillMaxSize()", "androidx.compose.ui.Modifier.fillMaxSize()")
+content = content.replace("Modifier.padding(24.dp)", "androidx.compose.ui.Modifier.padding(24.dp)")
+content = content.replace("Modifier.height(24.dp)", "androidx.compose.ui.Modifier.height(24.dp)")
+content = content.replace("Modifier.fillMaxWidth()", "androidx.compose.ui.Modifier.fillMaxWidth()")
+content = content.replace("Modifier.height(16.dp)", "androidx.compose.ui.Modifier.height(16.dp)")
+content = content.replace("Modifier.height(32.dp)", "androidx.compose.ui.Modifier.height(32.dp)")
+content = content.replace("Modifier.height(52.dp)", "androidx.compose.ui.Modifier.height(52.dp)")
 
-with open('app/src/main/java/com/example/ChatWorker.kt', 'r') as f:
-    worker = f.read()
+content = content.replace("com.example.ui.theme.RiderTheme", "RiderTheme")
+content = content.replace("androidx.activity.enableEdgeToEdge()", "enableEdgeToEdge()")
+content = content.replace("androidx.activity.compose.setContent", "setContent")
+content = content.replace("androidx.navigation.compose.composable", "composable")
 
-worker = worker.replace("msg.sender_type", "msg.senderType")
-worker = worker.replace("msg.order_id", "msg.orderId")
-
-with open('app/src/main/java/com/example/ChatWorker.kt', 'w') as f:
-    f.write(worker)
-
+with open("app/src/main/java/com/example/MainActivity.kt", "w") as f:
+    f.write(content)

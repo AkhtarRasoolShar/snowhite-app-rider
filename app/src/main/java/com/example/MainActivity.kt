@@ -1,91 +1,147 @@
 package com.example
-import retrofit2.http.Headers
-import android.util.Log
-import androidx.navigation.NavController
-import androidx.navigation.NavHostController
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import com.google.android.gms.location.LocationServices
-import android.location.Geocoder
-import android.location.Location
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import android.Manifest
-import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import android.content.pm.PackageManager
-import androidx.core.app.ActivityCompat
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.core.view.WindowCompat
-import androidx.activity.enableEdgeToEdge
-import android.os.Build
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.ExistingPeriodicWorkPolicy
-
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
-
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import coil.compose.AsyncImage
-import com.google.gson.GsonBuilder
-import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import com.google.gson.GsonBuilder
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.*
+import androidx.compose.ui.window.*
+import androidx.compose.foundation.interaction.*
+
+import androidx.compose.runtime.getValue
+
+import androidx.compose.runtime.setValue
+
+import androidx.compose.ui.Modifier
+
+
+
+import android.Manifest
+
+import android.content.Context
+
+import android.content.Intent
+
+import android.content.pm.PackageManager
+
+import android.location.Geocoder
+
+import android.location.Location
+
+import android.net.Uri
+
+import android.os.Build
+
+import android.os.Bundle
+
+import android.util.Log
+
+import android.widget.Toast
+
+import androidx.activity.ComponentActivity
+
+import androidx.activity.compose.setContent
+
+import androidx.activity.enableEdgeToEdge
+
+import androidx.activity.result.contract.ActivityResultContracts
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+
+import androidx.compose.animation.*
+
+import androidx.compose.foundation.*
+
+import androidx.compose.foundation.layout.*
+
+import androidx.compose.foundation.lazy.*
+
+import androidx.compose.foundation.lazy.grid.*
+
+import androidx.compose.foundation.shape.*
+
+import androidx.compose.material.icons.Icons
+
+import androidx.compose.material.icons.automirrored.filled.*
+
+import androidx.compose.material.icons.filled.*
+
+import androidx.compose.material3.*
+
+import androidx.compose.runtime.*
+
+import androidx.compose.ui.Alignment
+
+import androidx.compose.ui.graphics.Color
+
+import androidx.compose.ui.layout.ContentScale
+
+import androidx.compose.ui.platform.LocalContext
+
+import androidx.compose.ui.text.font.FontWeight
+
+import androidx.compose.ui.text.style.TextOverflow
+
+import androidx.compose.ui.unit.dp
+
+import androidx.compose.ui.unit.sp
+
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+
+import androidx.compose.ui.input.pointer.pointerInput
+
+import androidx.compose.foundation.gestures.detectTapGestures
+
+import androidx.core.app.ActivityCompat
+
+import androidx.core.view.WindowCompat
+
+import androidx.lifecycle.viewmodel.compose.viewModel
+
+import androidx.navigation.NavController
+
+import androidx.navigation.NavHostController
+
+import androidx.navigation.compose.*
+
+import androidx.work.*
+
+import coil.compose.AsyncImage
+
+
+import com.google.android.gms.location.LocationServices
+
+
 import retrofit2.Response
+
+import retrofit2.http.*
+
 import retrofit2.Retrofit
+
 import retrofit2.converter.gson.GsonConverterFactory
-import retrofit2.http.Body
-import retrofit2.http.GET
-import retrofit2.http.POST
-import retrofit2.http.Query
+
+import com.google.gson.annotations.SerializedName
+
+import com.google.gson.Gson
+
+
+import retrofit2.http.Headers
+
 import java.util.concurrent.TimeUnit
+
+import kotlin.reflect.KProperty
 
 // --- Colors ---
 val DarkBlue = Color(0xFF03045E)
@@ -152,7 +208,23 @@ data class OrderItem(
 )
 
 data class RiderLoginRequest(@SerializedName("phone") val phone: String? = null, val password: String, val is_rider_app: Boolean = true)
-data class RiderRegisterRequest(@SerializedName("name") val name: String? = null, @SerializedName("phone") val phone: String? = null, val password: String, @SerializedName("service_zone") val service_zone: String? = null)
+data class RiderRegisterRequest(
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("phone") val phone: String? = null,
+    val password: String,
+    @SerializedName("service_zone") val service_zone: List<String>? = null,
+    @SerializedName("email") val email: String? = null
+)
+data class Hub(
+    @SerializedName("id") val id: Int? = null,
+    @SerializedName("name") val name: String? = null
+)
+
+data class AppSettings(
+    val app_name: String? = null,
+    val logo_url: String? = null
+)
+
 data class AcceptOrderRequest(val order_id: String, val rider_id: String)
 data class UpdateOrderStatusRequest(val order_id: String, val status: String)
 
@@ -165,6 +237,9 @@ interface RiderApiService {
     @Headers("Content-Type: application/json")
     @POST("routes.php?action=rider_register")
     suspend fun register(@Body request: RiderRegisterRequest): Response<GenericResponse<RiderAuthData>>
+
+    @GET("routes.php?action=get_hubs")
+    suspend fun getHubs(): Response<GenericResponse<List<Hub>>>
 
     @GET("routes.php?action=get_available_orders")
     suspend fun getAvailableOrders(@Query("zone") zone: String, @Query("rider_id") riderId: Int): Response<GenericResponse<List<RiderOrder>>>
@@ -245,6 +320,53 @@ object SessionManager {
 }
 
 class RiderViewModel : ViewModel() {
+
+    var email by androidx.compose.runtime.mutableStateOf("")
+    var isFetchingHubs by androidx.compose.runtime.mutableStateOf(false)
+    var errorMessage by androidx.compose.runtime.mutableStateOf<String?>(null)
+    var availableHubs by androidx.compose.runtime.mutableStateOf<List<Hub>>(emptyList())
+    var selectedHubs by androidx.compose.runtime.mutableStateOf<Set<String>>(emptySet())
+    var appSettings by androidx.compose.runtime.mutableStateOf(AppSettings())
+
+    init {
+        fetchHubs()
+    }
+
+    fun fetchHubs() {
+        isFetchingHubs = true
+        viewModelScope.launch {
+            try {
+                try {
+                    val response = RetrofitClient.apiService.getHubs()
+                    if (response.isSuccessful) {
+                        val body = response.body()
+                        if (body?.status == "success" && body.data != null) {
+                            availableHubs = body.data
+                            errorMessage = null
+                            return@launch
+                        } else {
+                            errorMessage = body?.message ?: "Failed to fetch hubs."
+                        }
+                    } else {
+                        errorMessage = "Server Error: ${response.code()}"
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    errorMessage = "Network Error: Could not connect to server."
+                }
+                
+                // Fallback in case of HTTP 500 or Network Error
+                availableHubs = listOf(
+                    Hub(1, "Clifton"),
+                    Hub(2, "Tariq Road"),
+                    Hub(3, "DHA"),
+                    Hub(4, "Gulshan")
+                )
+            } finally {
+                isFetchingHubs = false
+            }
+        }
+    }
     private val _riderId = MutableStateFlow<Int>(-1)
     val riderId: StateFlow<Int> = _riderId
     
@@ -288,6 +410,26 @@ class RiderViewModel : ViewModel() {
     val authError: StateFlow<String?> = _authError
 
     private val _pendingApproval = MutableStateFlow(false)
+    
+    private val _sortOption = MutableStateFlow("Newest")
+    val sortOption: StateFlow<String> = _sortOption
+
+    fun setSortOption(option: String) {
+        _sortOption.value = option
+    }
+
+    private fun calculateHaversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
+        val R = 6371e3 // Earth radius in meters
+        val phi1 = Math.toRadians(lat1)
+        val phi2 = Math.toRadians(lat2)
+        val deltaPhi = Math.toRadians(lat2 - lat1)
+        val deltaLambda = Math.toRadians(lon2 - lon1)
+        val a = kotlin.math.sin(deltaPhi / 2) * kotlin.math.sin(deltaPhi / 2) +
+                kotlin.math.cos(phi1) * kotlin.math.cos(phi2) *
+                kotlin.math.sin(deltaLambda / 2) * kotlin.math.sin(deltaLambda / 2)
+        val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
+        return (R * c).toFloat()
+    }
     val pendingApproval: StateFlow<Boolean> = _pendingApproval
     
     sealed class PendingAction {
@@ -402,13 +544,13 @@ class RiderViewModel : ViewModel() {
         }
     }
 
-    fun register(name: String, phone: String, pass: String, zone: String, context: Context) {
+    fun register(name: String, phone: String, pass: String, zones: List<String>, email: String, context: Context) {
         viewModelScope.launch {
             _authError.value = null
             _pendingApproval.value = false
             try {
                 _isLoading.value = true
-                val response = RetrofitClient.apiService.register(RiderRegisterRequest(name, phone, pass, zone))
+                val response = RetrofitClient.apiService.register(RiderRegisterRequest(name, phone, pass, zones, email))
                 if (response.isSuccessful) {
                     val body = response.body()
                     if (body?.status == "success" && body.data != null) {
@@ -472,13 +614,11 @@ class RiderViewModel : ViewModel() {
                                 val results = geocoder.getFromLocationName(address, 1)
                                 if (!results.isNullOrEmpty()) {
                                     val loc = results[0]
-                                    val resultsArray = FloatArray(1)
-                                    Location.distanceBetween(
+                                    val distance = calculateHaversineDistance(
                                         location.latitude, location.longitude,
-                                        loc.latitude, loc.longitude,
-                                        resultsArray
+                                        loc.latitude, loc.longitude
                                     )
-                                    order.copy(distanceInMeters = resultsArray[0])
+                                    order.copy(distanceInMeters = distance)
                                 } else order
                             } catch (e: Exception) { order }
                         } else order
@@ -631,29 +771,6 @@ fun RiderTheme(content: @Composable () -> Unit) {
 
 // --- UI Components ---
 @Composable
-fun SnowhiteLogo(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.LocalLaundryService,
-            contentDescription = "SnoWhite Logo",
-            tint = Color.White,
-            modifier = Modifier.size(40.dp)
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = "SnoWhite",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Black,
-            color = Color.White
-        )
-    }
-}
-
-@Composable
 fun PersistentErrorBanner(error: String) {
     Surface(color = ErrorRed.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -667,7 +784,7 @@ fun PersistentErrorBanner(error: String) {
 
 private var keepAliveWebView: android.webkit.WebView? = null
 
-fun printReceipt(context: Context, order: RiderOrder) {
+fun printReceipt(context: Context, order: RiderOrder, appName: String) {
     val printManager = context.getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
     val webView = android.webkit.WebView(context)
     keepAliveWebView = webView
@@ -692,7 +809,7 @@ fun printReceipt(context: Context, order: RiderOrder) {
         </head>
         <body>
             <div class="header">
-                <div class="title">Snowhite Captain</div>
+                <div class="title">${appName}</div>
                 <div class="subtitle">Receipt - Order #${order.orderId ?: "N/A"}</div>
             </div>
             <div class="details">
@@ -754,13 +871,29 @@ fun LoginScreen(viewModel: RiderViewModel, navController: NavController, onNavig
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.65f)))
         
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier.fillMaxSize().imePadding().padding(24.dp).verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            SnowhiteLogo(modifier = Modifier.height(60.dp).fillMaxWidth())
-            Spacer(Modifier.height(16.dp))
-            Text("Captain Portal", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (!viewModel.appSettings.logo_url.isNullOrEmpty()) {
+                    coil.compose.AsyncImage(
+                        model = viewModel.appSettings.logo_url,
+                        contentDescription = "App Logo",
+                        modifier = Modifier.size(60.dp)
+                    )
+                } else {
+                    Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(60.dp), tint = Color.White)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = viewModel.appSettings.app_name ?: "Captain Portal",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text("Rider Login", color = Color.White.copy(alpha = 0.8f))
+            }
             Spacer(Modifier.height(32.dp))
             
             Card(
@@ -815,10 +948,7 @@ fun RegisterScreen(viewModel: RiderViewModel, onNavigateToLogin: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var zone by remember { mutableStateOf("") }
-    var expandedZone by remember { mutableStateOf(false) }
     
-    val zones = listOf("Clifton", "Tariq Road", "DHA", "Gulshan")
     val isLoading by viewModel.isLoading.collectAsState()
     val authError by viewModel.authError.collectAsState()
 
@@ -832,15 +962,31 @@ fun RegisterScreen(viewModel: RiderViewModel, onNavigateToLogin: () -> Unit) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.65f)))
         
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier.fillMaxSize().imePadding().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             item {
                 Spacer(Modifier.height(24.dp))
-                SnowhiteLogo(modifier = Modifier.height(50.dp).fillMaxWidth())
-                Spacer(Modifier.height(16.dp))
-                Text("Captain Portal", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (!viewModel.appSettings.logo_url.isNullOrEmpty()) {
+                        coil.compose.AsyncImage(
+                            model = viewModel.appSettings.logo_url,
+                            contentDescription = "App Logo",
+                            modifier = Modifier.size(60.dp)
+                        )
+                    } else {
+                        Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(60.dp), tint = Color.White)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = viewModel.appSettings.app_name ?: "Captain Portal",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text("Rider Registration", color = Color.White.copy(alpha = 0.8f))
+                }
                 Spacer(Modifier.height(32.dp))
                 
                 Card(
@@ -870,32 +1016,61 @@ fun RegisterScreen(viewModel: RiderViewModel, onNavigateToLogin: () -> Unit) {
                             onValueChange = { password = it; viewModel.clearError() },
                             label = { Text("Password") },
                             modifier = Modifier.fillMaxWidth(),
-                            visualTransformation = PasswordVisualTransformation()
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = viewModel.email,
+                            onValueChange = { viewModel.email = it; viewModel.clearError() },
+                            label = { Text("Email") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
                         )
                         Spacer(Modifier.height(16.dp))
                         
+                        viewModel.errorMessage?.let {
+                            PersistentErrorBanner(it)
+                            Spacer(Modifier.height(8.dp))
+                        }
                         Text("Select Active Hubs:", fontWeight = FontWeight.Bold, color = DarkBlue, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                        var selectedZones by remember { mutableStateOf(setOf<String>()) }
-                        zones.forEach { selection ->
+                        
+                        if (viewModel.isFetchingHubs) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = TealAccent)
+                            }
+                        } else {
+                        viewModel.availableHubs.forEach { hub ->
+                            val hubName = hub.name ?: "Unknown"
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                 Checkbox(
-                                    checked = selectedZones.contains(selection),
+                                    checked = viewModel.selectedHubs.contains(hubName),
                                     onCheckedChange = { isChecked ->
-                                        selectedZones = if (isChecked) selectedZones + selection else selectedZones - selection
+                                        viewModel.selectedHubs = if (isChecked) viewModel.selectedHubs + hubName else viewModel.selectedHubs - hubName
+                                        viewModel.errorMessage = null
                                     },
                                     colors = CheckboxDefaults.colors(checkedColor = TealAccent)
                                 )
-                                Text(selection, color = DarkBlue)
+                                Text(hubName, color = DarkBlue)
                             }
+                        }
                         }
                         
                         Spacer(Modifier.height(24.dp))
-                        val joinedZones = selectedZones.joinToString(", ")
+                        
+                        val isFormValid = name.isNotBlank() && phone.isNotBlank() && password.isNotBlank() && viewModel.email.isNotBlank() && viewModel.selectedHubs.isNotEmpty()
+                        
                         Button(
-                            onClick = { viewModel.register(name, phone, password, joinedZones, context) },
+                            onClick = {
+                                if (isFormValid) {
+                                    viewModel.register(name, phone, password, viewModel.selectedHubs.toList(), viewModel.email, context)
+                                } else {
+                                    android.widget.Toast.makeText(context, "Please fill all fields and select at least one hub.", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth().height(50.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF03045E)),
-                            enabled = !isLoading && name.isNotBlank() && phone.isNotBlank() && password.isNotBlank() && selectedZones.isNotEmpty()
+                            colors = ButtonDefaults.buttonColors(containerColor = if (isFormValid) Color(0xFF03045E) else Color.Gray),
+                            enabled = !isLoading
                         ) {
                             if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                             else Text("REGISTER", color = Color.White, fontWeight = FontWeight.Bold)
@@ -913,6 +1088,160 @@ fun RegisterScreen(viewModel: RiderViewModel, onNavigateToLogin: () -> Unit) {
     }
 }
 
+
+@Composable
+fun RiderDashboardScreen(viewModel: RiderViewModel, onNavigateToRadar: () -> Unit) {
+    val riderName by viewModel.riderName.collectAsState()
+    val myOrders by viewModel.myOrders.collectAsState()
+    
+    val completedOrders = myOrders.count { it.status == "DELIVERED" }
+    val totalEarnings = myOrders.filter { it.status == "DELIVERED" }.sumOf { it.totalAmount?.toDoubleOrNull() ?: 0.0 }
+    
+    // Take the 5 most recent orders for the dashboard
+    val recentOrders = myOrders.take(5)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8FAFC)) 
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+        // --- HEADER SECTION ---
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp, top = 8.dp)
+        ) {
+            Column {
+                Text("Welcome back,", color = Color(0xFF64748B), fontSize = 14.sp)
+                Text(text = riderName.ifEmpty { "Captain" }, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF0F172A))
+            }
+        }
+
+        // --- STATS CARDS SECTION ---
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Earnings Card
+            Card(
+                modifier = Modifier.weight(1f).height(120.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0EA5E9))
+            ) {
+                Column(modifier = Modifier.padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                    Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = Color.White)
+                    Column {
+                        Text("Total Earnings", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                        Text("PKR $totalEarnings", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // Completed Orders Card
+            Card(
+                modifier = Modifier.weight(1f).height(120.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981))
+                    Column {
+                        Text("Completed Orders", color = Color.Gray, fontSize = 12.sp)
+                        Text("$completedOrders", color = Color(0xFF0F172A), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // --- QUICK ACTION (RADAR) ---
+        Text("Quick Actions", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.padding(bottom = 12.dp))
+        Button(
+            onClick = { onNavigateToRadar() },
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0B192C)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.Radar, contentDescription = null, tint = Color.White)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text("Go to Radar (Find Orders)", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // --- RECENT ORDERS (HISTORY) SECTION ---
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Recent Orders", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+        }
+
+        if (recentOrders.isEmpty()) {
+            Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.ListAlt, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color.LightGray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("No recent orders found.", color = Color.Gray, fontSize = 14.sp)
+                }
+            }
+        } else {
+            recentOrders.forEach { order ->
+                // Determine Status Colors dynamically
+                val statusColor = when (order.status) {
+                    "DELIVERED" -> Color(0xFF10B981) // Green
+                    "PENDING", "COLLECTING" -> Color(0xFFF59E0B) // Orange
+                    "RECEIVED_AT_HUB", "WASHING", "READY_FOR_DELIVERY" -> Color(0xFF3B82F6) // Blue
+                    else -> Color.Gray
+                }
+
+                val statusText = order.status?.replace("_", " ") ?: "UNKNOWN"
+
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Order #${order.orderId}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0F172A))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(order.date ?: "", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "PKR ${order.totalAmount}", 
+                                fontWeight = FontWeight.ExtraBold, 
+                                fontSize = 16.sp, 
+                                color = Color(0xFF0F172A)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            
+                            // Status Badge
+                            Text(
+                                text = statusText, 
+                                fontSize = 10.sp, 
+                                color = statusColor, 
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun MainAppScreen(viewModel: RiderViewModel) {
     val navController = rememberNavController()
@@ -921,38 +1250,69 @@ fun MainAppScreen(viewModel: RiderViewModel) {
     val currentRoute = navBackStackEntry?.destination?.route
     
     Scaffold(
+        contentWindowInsets = WindowInsets.ime,
         bottomBar = {
             if (currentRoute != null && !currentRoute.startsWith("chat/")) {
-                NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
-
-                
+                NavigationBar(containerColor = Color.White) {
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Radar, contentDescription = "Radar") },
-                    label = { Text("Radar") },
-                    selected = currentRoute == "radar",
-                    onClick = { navController.navigate("radar") { launchSingleTop = true } },
-                    colors = NavigationBarItemDefaults.colors(selectedIconColor = TealAccent, selectedTextColor = TealAccent)
+                    icon = { Icon(Icons.Default.Dashboard, contentDescription = "Dashboard") },
+                    label = { Text("Dashboard") },
+                    selected = currentRoute == "dashboard",
+                    onClick = { navController.navigate("dashboard") { launchSingleTop = true; restoreState = true } },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF00B4D8),
+                        selectedTextColor = Color(0xFF00B4D8),
+                        indicatorColor = Color.Transparent,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray
+                    )
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.List, contentDescription = "History") },
+                    icon = { Icon(Icons.Default.LocationSearching, contentDescription = "Radar") },
+                    label = { Text("Radar") },
+                    selected = currentRoute == "radar",
+                    onClick = { navController.navigate("radar") { launchSingleTop = true; restoreState = true } },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF00B4D8),
+                        selectedTextColor = Color(0xFF00B4D8),
+                        indicatorColor = Color.Transparent,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray
+                    )
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History") },
                     label = { Text("History") },
                     selected = currentRoute == "history",
-                    onClick = { navController.navigate("history") { launchSingleTop = true } },
-                    colors = NavigationBarItemDefaults.colors(selectedIconColor = TealAccent, selectedTextColor = TealAccent)
+                    onClick = { navController.navigate("history") { launchSingleTop = true; restoreState = true } },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF00B4D8),
+                        selectedTextColor = Color(0xFF00B4D8),
+                        indicatorColor = Color.Transparent,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray
+                    )
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
                     label = { Text("Profile") },
                     selected = currentRoute == "profile",
-                    onClick = { navController.navigate("profile") { launchSingleTop = true } },
-                    colors = NavigationBarItemDefaults.colors(selectedIconColor = TealAccent, selectedTextColor = TealAccent)
+                    onClick = { navController.navigate("profile") { launchSingleTop = true; restoreState = true } },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF00B4D8),
+                        selectedTextColor = Color(0xFF00B4D8),
+                        indicatorColor = Color.Transparent,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray
+                    )
                 )
             }
             }
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            NavHost(navController = navController, startDestination = "radar", modifier = Modifier.fillMaxSize()) {
+            NavHost(navController = navController, startDestination = "dashboard", modifier = Modifier.fillMaxSize()) {
+            composable("dashboard") { RiderDashboardScreen(viewModel, onNavigateToRadar = { navController.navigate("radar") { launchSingleTop = true; restoreState = true } }) }
             composable("radar") { RadarScreen(viewModel) }
             composable("history") { HistoryScreen(viewModel, navController) }
                         composable("wallet") { WalletScreen(viewModel) }
@@ -1008,13 +1368,13 @@ fun RadarScreen(viewModel: RiderViewModel) {
 
     var selectedOrderForReview by remember { mutableStateOf<RiderOrder?>(null) }
     val radarSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var sortOption by remember { mutableStateOf("Newest") }
+    val sortOption by viewModel.sortOption.collectAsState()
     var expandedSortMenu by remember { mutableStateOf(false) }
     
     val sortedOrders = remember(orders, sortOption) {
         when (sortOption) {
             "Total Amount" -> orders.sortedByDescending { it.totalAmount?.toDoubleOrNull() ?: 0.0 }
-            "Proximity" -> orders.sortedBy { it.distanceInMeters ?: Float.MAX_VALUE }
+            "Distance (Haversine)" -> orders.sortedBy { it.distanceInMeters ?: Float.MAX_VALUE }
             "Hub" -> orders.sortedBy { it.zone ?: "" }
             else -> orders.sortedByDescending { it.orderId?.toIntOrNull() ?: 0 }
         }
@@ -1024,97 +1384,66 @@ fun RadarScreen(viewModel: RiderViewModel) {
         viewModel.fetchAvailableOrders(context)
     }
 
-    // Clean Layout Hierarchy: No Overlapping Full-Size Boxes
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF5F6FA))) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Premium Delivery Header
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF03045E)),
-            shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF8F9FA))) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Premium Header
+            Surface(
+                color = Color.White,
+                shadowElevation = 2.dp,
+                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Radar Active",
-                        color = Color.LightGray,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Searching in:",
-                        color = Color.LightGray,
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        zone.uppercase(),
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 20.sp,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(Modifier.width(16.dp))
-                IconButton(
-                    onClick = { viewModel.fetchAvailableOrders(context) },
-                    modifier = Modifier.background(Color(0xFF00B4D8), CircleShape).size(48.dp)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White)
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(10.dp).background(Color(0xFF00C853), CircleShape))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Online & Searching", color = Color.Gray, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(zone.uppercase(), fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Color(0xFF1E293B))
+                        }
+                        IconButton(
+                            onClick = { viewModel.fetchAvailableOrders(context) },
+                            modifier = Modifier.background(Color(0xFFF1F5F9), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color(0xFF00B4D8))
+                        }
+                    }
                 }
             }
-        }
-        
-        if (orders.isEmpty() && !isLoading) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Search, 
-                        contentDescription = "Empty", 
-                        tint = Color.Gray.copy(alpha = 0.5f), 
-                        modifier = Modifier.size(80.dp)
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "No new orders right now.\nKeep your radar on!", 
-                        color = Color.DarkGray, 
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        } else if (!isLoading) {
+            
+            // Available & Sorting
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "${sortedOrders.size} Available",
+                    "${sortedOrders.size} Requests",
                     fontWeight = FontWeight.Bold,
-                    color = Color.DarkGray,
-                    fontSize = 16.sp
+                    color = Color(0xFF1E293B),
+                    fontSize = 18.sp
                 )
                 Box {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(20.dp),
                         color = Color.White,
-                        shadowElevation = 2.dp,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
                         modifier = Modifier.clickable { expandedSortMenu = true }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.FilterList, contentDescription = "Sort", tint = Color(0xFF03045E), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Sort, contentDescription = "Sort", tint = Color(0xFF64748B), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(sortOption, color = Color(0xFF03045E), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(sortOption, color = Color(0xFF334155), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         }
                     }
                     DropdownMenu(
@@ -1123,77 +1452,137 @@ fun RadarScreen(viewModel: RiderViewModel) {
                     ) {
                         DropdownMenuItem(
                             text = { Text("Newest") },
-                            onClick = { sortOption = "Newest"; expandedSortMenu = false }
+                            onClick = { viewModel.setSortOption("Newest"); expandedSortMenu = false }
                         )
                         DropdownMenuItem(
                             text = { Text("Total Amount") },
-                            onClick = { sortOption = "Total Amount"; expandedSortMenu = false }
+                            onClick = { viewModel.setSortOption("Total Amount"); expandedSortMenu = false }
                         )
                         DropdownMenuItem(
-                            text = { Text("Proximity") },
-                            onClick = { sortOption = "Proximity"; expandedSortMenu = false }
+                            text = { Text("Distance (Haversine)") },
+                            onClick = { viewModel.setSortOption("Distance (Haversine)"); expandedSortMenu = false }
                         )
                         DropdownMenuItem(
                             text = { Text("Hub (Zone)") },
-                            onClick = { sortOption = "Hub"; expandedSortMenu = false }
+                            onClick = { viewModel.setSortOption("Hub"); expandedSortMenu = false }
                         )
                     }
                 }
             }
-            
-            // Clean 2-column Grid Layout
-            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f).fillMaxWidth()
-            ) {
-                items(
-                    items = sortedOrders,
-                    key = { it.orderId ?: 0 }
-                ) { order ->
-                    Card(
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().clickable { selectedOrderForReview = order }
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
-                            Text(
-                                "Order #${order.orderId}",
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF03045E),
-                                fontSize = 14.sp
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "PKR ${order.totalAmount ?: "0"}",
-                                color = Color(0xFF00B4D8),
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 14.sp
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.DateRange, contentDescription = "Date", tint = Color.Gray, modifier = Modifier.size(12.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(order.date ?: "Just now", color = Color.DarkGray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Row(verticalAlignment = Alignment.Top) {
-                                Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = Color.Gray, modifier = Modifier.size(12.dp).padding(top = 2.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(order.pickupAddress ?: "N/A", color = Color.DarkGray, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            Button(
-                                onClick = { selectedOrderForReview = order },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                                contentPadding = PaddingValues(vertical = 8.dp)
-                            ) {
-                                Text("REVIEW", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+
+            if (sortedOrders.isEmpty() && !isLoading) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.Radar, 
+                            contentDescription = "Searching", 
+                            tint = Color.LightGray, 
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "No new requests nearby", 
+                            color = Color.Gray, 
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                ) {
+                    items(
+                        items = sortedOrders,
+                        key = { it.orderId ?: 0 }
+                    ) { order ->
+                        Card(
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth().clickable { selectedOrderForReview = order }
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Order #${order.orderId}",
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFF0F172A),
+                                        fontSize = 16.sp
+                                    )
+                                    Text(
+                                        "PKR ${order.totalAmount ?: "0"}",
+                                        color = Color(0xFF00B4D8),
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 16.sp
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.AccessTime, contentDescription = "Date", tint = Color(0xFF64748B), modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(order.date ?: "Just now", color = Color(0xFF64748B), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                
+                                Spacer(Modifier.height(12.dp))
+                                HorizontalDivider(color = Color(0xFFF1F5F9))
+                                Spacer(Modifier.height(12.dp))
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Place, contentDescription = "Location", tint = Color(0xFF64748B), modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        text = order.pickupAddress ?: "N/A", 
+                                        fontSize = 14.sp, 
+                                        modifier = Modifier.weight(1f),
+                                        color = Color(0xFF334155),
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    
+                                    IconButton(
+                                        onClick = {
+                                            try {
+                                                val gmmIntentUri = android.net.Uri.parse("geo:0,0?q=${android.net.Uri.encode(order.pickupAddress ?: "")}")
+                                                val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, gmmIntentUri)
+                                                mapIntent.setPackage("com.google.android.apps.maps")
+                                                context.startActivity(mapIntent)
+                                            } catch (e: Exception) {
+                                                android.widget.Toast.makeText(context, "Google Maps is not installed", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(Color(0xFFE0F2FE), shape = CircleShape)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Directions,
+                                            contentDescription = "Navigate",
+                                            tint = Color(0xFF0284C7),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                                
+                                Spacer(Modifier.height(16.dp))
+                                Button(
+                                    onClick = { selectedOrderForReview = order },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                                ) {
+                                    Text("REVIEW & ACCEPT", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
                             }
                         }
                     }
@@ -1201,7 +1590,6 @@ fun RadarScreen(viewModel: RiderViewModel) {
             }
         }
     }
-    } // End of Column, still inside Box
 
     if (selectedOrderForReview != null) {
         ModalBottomSheet(
@@ -1225,10 +1613,6 @@ fun RadarScreen(viewModel: RiderViewModel) {
         }
     }
 }
-
-
-
-
 
 @Composable
 fun StatusBadge(status: String) {
@@ -1393,7 +1777,7 @@ fun HistoryScreen(viewModel: RiderViewModel, navController: androidx.navigation.
                         viewModel.updateOrderStatus(selectedOrderForUpdate!!.orderId.toString(), nextStatus, context)
                         selectedOrderForUpdate = null
                     },
-                    onPrint = { printReceipt(context, selectedOrderForUpdate!!) },
+                    onPrint = { printReceipt(context, selectedOrderForUpdate!!, viewModel.appSettings.app_name ?: "Captain Portal") },
                     onChat = {
                         navController.navigate("chat/${selectedOrderForUpdate!!.orderId}")
                     }
@@ -1414,241 +1798,158 @@ fun ProfileScreen(viewModel: RiderViewModel, navController: NavHostController) {
     var bankIban by remember { mutableStateOf(viewModel.bankIban.value) }
     var whatsapp by remember { mutableStateOf(if (viewModel.whatsappNumber.value.isNotEmpty()) viewModel.whatsappNumber.value else viewModel.riderPhone.value) }
 
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        AsyncImage(model = "https://images.pexels.com/photos/5591581/pexels-photo-5591581.jpeg?auto=compress&cs=tinysrgb&w=1080", contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.92f)))
-        AsyncImage(
-            model = "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1080&auto=format&fit=crop",
-            contentDescription = "Background",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-            alpha = 0.05f
-        )
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF8F9FA))) {
         Column(modifier = Modifier.fillMaxSize()) {
-        Surface(color = Color.White, shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                SnowhiteLogo(modifier = Modifier.height(40.dp))
-                Spacer(Modifier.width(12.dp))
-                Text("Captain Profile", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = DarkBlue)
-            }
-        }
-        
-        LazyColumn(contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxSize()) {
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AccountCircle, contentDescription = "Avatar", tint = DarkBlue, modifier = Modifier.size(64.dp))
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(name, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = DarkBlue)
-                        Text("Hubs: $zone", color = TealAccent, fontWeight = FontWeight.Bold)
+            // Header
+            Surface(
+                color = Color.White,
+                shadowElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(Color(0xFFE0F2FE), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (name.isNotEmpty()) name.take(1).uppercase() else "U",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF00B4D8)
+                        )
                     }
-                }
-                Spacer(Modifier.height(24.dp))
-                
-                Text("Home Address", color = DarkBlue, fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
-                    placeholder = { Text("Enter personal address") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                Spacer(Modifier.height(16.dp))
-                Text("Contact Information", color = DarkBlue, fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = whatsapp,
-                    onValueChange = { whatsapp = it },
-                    label = { Text("WhatsApp Number (Visible to Customers)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                Spacer(Modifier.height(16.dp))
-                Text("Bank Details for Payouts", color = DarkBlue, fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = bankName,
-                    onValueChange = { bankName = it },
-                    placeholder = { Text("Bank Name") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = bankIban,
-                    onValueChange = { bankIban = it },
-                    placeholder = { Text("IBAN / Account Number") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                Spacer(Modifier.height(16.dp))
-                Text("App Settings", color = DarkBlue, fontWeight = FontWeight.Bold)
-                Button(
-                    onClick = { navController.navigate("quickReplies") },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE3F2FD), contentColor = DarkBlue)
-                ) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Manage Quick Replies", fontWeight = FontWeight.Medium)
-                }
-                
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = { viewModel.saveProfileDetails(context, address, bankName, bankIban, viewModel.quickReply1.value, viewModel.quickReply2.value)
-                        viewModel.updateWhatsApp(context, whatsapp) },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = TealAccent)
-                ) {
-                    Text("Save Details", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-                
-                Spacer(Modifier.height(32.dp))
-                HorizontalDivider(color = Color.LightGray)
-                Spacer(Modifier.height(16.dp))
-                
-                Button(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/923001234567"))
-                        try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "WhatsApp not installed", Toast.LENGTH_SHORT).show() }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
-                ) {
-                    Icon(Icons.Default.SupportAgent, contentDescription = "Help", tint = Color.White)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Customer Support / Help", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-                
-                                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = { viewModel.logout(context) },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
-                ) {
-                    Icon(Icons.Default.PowerSettingsNew, contentDescription = "Logout", tint = Color.White)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Go Offline / Logout", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-}
-
-// --- Main Activity ---
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
-            }
-        }
-
-        val workRequest = PeriodicWorkRequestBuilder<OrderPollingWorker>(15, TimeUnit.MINUTES).build()
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "OrderPolling",
-            ExistingPeriodicWorkPolicy.KEEP,
-            workRequest
-        )
-
-        enableEdgeToEdge()
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        setContent {
-            RiderTheme {
-                val viewModel: RiderViewModel = viewModel()
-                val context = LocalContext.current
-                
-                val navController = rememberNavController()
-                
-                LaunchedEffect(Unit) {
-                    viewModel.initSession(context)
-                }
-                val riderId by viewModel.riderId.collectAsState()
-                
-                LaunchedEffect(riderId) {
-                    if (riderId != -1) {
-                        navController.navigate("dashboard") { popUpTo(0) }
-                    } else {
-                        navController.navigate("auth") { popUpTo(0) }
-                    }
-                }
-                
-                NavHost(navController = navController, startDestination = "auth") {
-                    composable("auth") {
-                        AuthFlow(viewModel, navController)
-                    }
-                    composable("dashboard") {
-                        MainAppScreen(viewModel)
+                    Spacer(Modifier.height(16.dp))
+                    Text(name.ifEmpty { "Driver" }, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp, color = Color(0xFF1E293B))
+                    Spacer(Modifier.height(4.dp))
+                    Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(12.dp)) {
+                        Text("Hub: ${zone.ifEmpty { "N/A" }}", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = Color(0xFF475569), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
                 }
             }
-        }
-            }
-    }
-
-
-@Composable
-fun SophisticatedLoadingIndicator() {
-    val infiniteTransition = rememberInfiniteTransition(label = "loading")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
-    )
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 1.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(80.dp)) {
-            // Outer rotating ring
-            CircularProgressIndicator(
-                modifier = Modifier.fillMaxSize().graphicsLayer { rotationZ = rotation },
-                color = Color(0xFF00B4D8),
-                strokeWidth = 3.dp,
-                trackColor = Color(0xFF03045E).copy(alpha = 0.1f)
-            )
-            // Inner rotating ring (opposite direction)
-            CircularProgressIndicator(
-                modifier = Modifier.size(50.dp).graphicsLayer { rotationZ = -rotation },
-                color = Color(0xFF03045E),
-                strokeWidth = 4.dp,
-                strokeCap = StrokeCap.Round
-            )
-            // Center pulsing icon
-            Icon(
-                Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = Color(0xFF00B4D8),
-                modifier = Modifier.size(24.dp).graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
+            
+            LazyColumn(
+                contentPadding = PaddingValues(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item {
+                    Text("Account Details", color = Color(0xFF64748B), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            OutlinedTextField(
+                                value = address,
+                                onValueChange = { address = it },
+                                label = { Text("Home Address") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = whatsapp,
+                                onValueChange = { whatsapp = it },
+                                label = { Text("WhatsApp Number") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(24.dp))
+                    Text("Bank Information", color = Color(0xFF64748B), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            OutlinedTextField(
+                                value = bankName,
+                                onValueChange = { bankName = it },
+                                label = { Text("Bank Name") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = bankIban,
+                                onValueChange = { bankIban = it },
+                                label = { Text("IBAN / Account Number") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(32.dp))
+                    Button(
+                        onClick = { 
+                            viewModel.saveProfileDetails(context, address, bankName, bankIban, viewModel.quickReply1.value, viewModel.quickReply2.value)
+                            viewModel.updateWhatsApp(context, whatsapp) 
+                        },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("SAVE CHANGES", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                    
+                    Spacer(Modifier.height(24.dp))
+                    Text("Preferences & Support", color = Color(0xFF64748B), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
+                    
+                    OutlinedButton(
+                        onClick = { navController.navigate("quickReplies") },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color(0xFF334155), modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Manage Quick Replies", color = Color(0xFF334155), fontWeight = FontWeight.SemiBold)
+                    }
+                    
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/923001234567"))
+                            try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "WhatsApp not installed", Toast.LENGTH_SHORT).show() }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.SupportAgent, contentDescription = "Help", tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Customer Support", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Spacer(Modifier.height(24.dp))
+                    TextButton(
+                        onClick = { viewModel.logout(context) },
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) {
+                        Icon(Icons.Default.PowerSettingsNew, contentDescription = "Logout", tint = Color(0xFFEF4444))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Sign Out", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(32.dp))
                 }
-            )
+            }
         }
-        Spacer(Modifier.height(24.dp))
-        Text(
-            "Scanning for orders...",
-            color = Color(0xFF03045E),
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp,
-            modifier = Modifier.graphicsLayer { alpha = if (scale < 1f) scale else 2f - scale }
-        )
     }
 }
 
@@ -1656,65 +1957,92 @@ fun SophisticatedLoadingIndicator() {
 @Composable
 fun QuickRepliesScreen(viewModel: RiderViewModel, navController: NavHostController) {
     val context = LocalContext.current
-    val qr1State = viewModel.quickReply1.collectAsState()
-    val qr2State = viewModel.quickReply2.collectAsState()
-    var qr1 by remember { mutableStateOf(qr1State.value) }
-    var qr2 by remember { mutableStateOf(qr2State.value) }
+    var reply1 by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(viewModel.quickReply1.value) }
+    var reply2 by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(viewModel.quickReply2.value) }
 
-    
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Quick Replies", fontWeight = FontWeight.Bold, color = DarkBlue) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DarkBlue)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(SoftWhite)
-                .padding(padding)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                "Save custom message templates to use in the order chat or send via WhatsApp.",
-                color = Color.Gray,
-                fontSize = 14.sp
-            )
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF8F9FA))) {
+        Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+            Text("Manage Quick Replies", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+            Spacer(Modifier.height(24.dp))
             
             OutlinedTextField(
-                value = qr1,
-                onValueChange = { qr1 = it },
-                label = { Text("Quick Reply 1 (e.g. On my way)") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                value = reply1,
+                onValueChange = { reply1 = it },
+                label = { Text("Quick Reply 1") },
+                modifier = Modifier.fillMaxWidth()
             )
+            Spacer(Modifier.height(16.dp))
             OutlinedTextField(
-                value = qr2,
-                onValueChange = { qr2 = it },
-                label = { Text("Quick Reply 2 (e.g. Arrived)") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                value = reply2,
+                onValueChange = { reply2 = it },
+                label = { Text("Quick Reply 2") },
+                modifier = Modifier.fillMaxWidth()
             )
+            Spacer(Modifier.height(32.dp))
             
-            Spacer(Modifier.weight(1f))
             Button(
                 onClick = { 
-                    viewModel.saveProfileDetails(context, viewModel.homeAddress.value, viewModel.bankName.value, viewModel.bankIban.value, qr1, qr2)
-                    Toast.makeText(context, "Quick Replies Saved", Toast.LENGTH_SHORT).show()
+                    viewModel.saveProfileDetails(context, viewModel.homeAddress.value, viewModel.bankName.value, viewModel.bankIban.value, reply1, reply2)
                     navController.popBackStack()
                 },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = TealAccent)
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Save Templates", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("SAVE REPLIES", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+// --- Main Activity ---
+class MainActivity : androidx.activity.ComponentActivity() {
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
+        val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.example.OrderPollingWorker>(15, java.util.concurrent.TimeUnit.MINUTES).build()
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "OrderPolling",
+            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
+
+        enableEdgeToEdge()
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        setContent {
+            RiderTheme {
+                val viewModel: RiderViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                val context = LocalContext.current
+                
+                val navController = androidx.navigation.compose.rememberNavController()
+                
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    viewModel.initSession(context)
+                }
+                val riderId by viewModel.riderId.collectAsState()
+                
+                androidx.compose.runtime.LaunchedEffect(riderId) {
+                    if (riderId != -1) {
+                        navController.navigate("dashboard") { popUpTo(0) }
+                    } else {
+                        navController.navigate("auth") { popUpTo(0) }
+                    }
+                }
+                
+                androidx.navigation.compose.NavHost(navController = navController, startDestination = "auth") {
+                    composable("auth") {
+                        AuthFlow(viewModel, navController)
+                    }
+                    composable("dashboard") {
+                        MainAppScreen(viewModel)
+                    }
+                }
             }
         }
     }

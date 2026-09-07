@@ -1,41 +1,11 @@
-import re
+with open("app/src/main/java/com/example/MainActivity.kt", "r") as f:
+    content = f.read()
 
-def fix_worker():
-    with open("app/src/main/java/com/example/OrderPollingWorker.kt", "r") as f:
-        content = f.read()
-    
-    # Just grab everything after "class OrderPollingWorker"
-    idx = content.find("class OrderPollingWorker")
-    if idx == -1: return
-    body = content[idx:]
-    
-    imports = """package com.example
+# find the last import
+end_imports = content.rfind("import ")
+end_line = content.find("\n", end_imports)
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.work.CoroutineWorker
-import androidx.work.WorkerParameters
-import retrofit2.Response
-
-"""
-    with open("app/src/main/java/com/example/OrderPollingWorker.kt", "w") as f:
-        f.write(imports + body)
-
-def fix_main():
-    with open("app/src/main/java/com/example/MainActivity.kt", "r") as f:
-        content = f.read()
-
-    idx = content.find("// --- Colors ---")
-    if idx == -1: return
-    body = content[idx:]
-
-    imports = """package com.example
+clean_imports = """package com.example
 
 import android.Manifest
 import android.content.Context
@@ -57,7 +27,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -88,11 +57,18 @@ import com.example.ui.theme.RiderTheme
 import com.google.android.gms.location.LocationServices
 import retrofit2.http.Headers
 import java.util.concurrent.TimeUnit
-import kotlin.reflect.KProperty
-
 """
-    with open("app/src/main/java/com/example/MainActivity.kt", "w") as f:
-        f.write(imports + body)
 
-fix_worker()
-fix_main()
+# Let's clean up any fully-qualified names in MainActivity that might cause errors
+new_content = clean_imports + content[end_line:]
+
+# Fix any `androidx.compose.ui.androidx.compose.ui` issues
+new_content = new_content.replace("androidx.compose.ui.androidx.compose.ui", "androidx.compose.ui")
+new_content = new_content.replace("androidx.compose.ui.Modifier", "Modifier")
+new_content = new_content.replace("androidx.activity.compose.setContent", "setContent")
+new_content = new_content.replace("androidx.navigation.compose.composable", "composable")
+new_content = new_content.replace("androidx.compose.foundation.shape.RoundedCornerShape", "RoundedCornerShape")
+new_content = new_content.replace("androidx.activity.enableEdgeToEdge", "enableEdgeToEdge")
+
+with open("app/src/main/java/com/example/MainActivity.kt", "w") as f:
+    f.write(new_content)

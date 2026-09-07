@@ -1,209 +1,117 @@
-with open("/app/applet/app/src/main/java/com/example/viewmodel/SnowWhiteViewModel.kt", "w") as f:
-    f.write("""package com.example.viewmodel
+import re
 
-import android.app.Application
-import android.content.Context
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
-import com.example.network.ApiService
-import com.example.network.LaundryItemRequest
-import com.example.network.LaundryOrderRequest
-import com.example.network.LoginRequest
-import com.example.network.OrderResponse
-import com.example.network.RegisterRequest
-import com.example.network.RetrofitClient
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
+with open("app/src/main/java/com/example/MainActivity.kt", "r") as f:
+    content = f.read()
 
-class SnowWhiteViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val prefs = application.getSharedPreferences("CustomerPrefs", Context.MODE_PRIVATE)
-
-    private val _isLoggedIn = MutableStateFlow(prefs.getInt("customer_id", -1) != -1)
-    val isLoggedIn = _isLoggedIn.asStateFlow()
-
-    private val _customerName = MutableStateFlow(prefs.getString("customer_name", "Guest") ?: "Guest")
-    val customerName = _customerName.asStateFlow()
-
-    private val _customerPhone = MutableStateFlow(prefs.getString("customer_phone", "") ?: "")
-    val customerPhone = _customerPhone.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
-
-    private val _cartItems = MutableStateFlow<Map<String, Int>>(emptyMap())
-    val cartItems: StateFlow<Map<String, Int>> = _cartItems
-
-    private val _orderHistory = MutableStateFlow<List<OrderResponse>>(emptyList())
-    val orderHistory: StateFlow<List<OrderResponse>> = _orderHistory
-
-    fun addToCart(garmentId: String) {
-        val current = _cartItems.value.toMutableMap()
-        current[garmentId] = (current[garmentId] ?: 0) + 1
-        _cartItems.value = current
-    }
-
-    fun removeFromCart(garmentId: String) {
-        val current = _cartItems.value.toMutableMap()
-        val count = current[garmentId] ?: 0
-        if (count > 1) {
-            current[garmentId] = count - 1
-        } else {
-            current.remove(garmentId)
-        }
-        _cartItems.value = current
-    }
+# Add sortOption state and haversine method to RiderViewModel
+target_viewmodel = """    private val _pendingApproval = MutableStateFlow(false)"""
+replacement_viewmodel = """    private val _pendingApproval = MutableStateFlow(false)
     
-    fun clearCart() {
-        _cartItems.value = emptyMap()
+    private val _sortOption = MutableStateFlow("Newest")
+    val sortOption: StateFlow<String> = _sortOption
+
+    fun setSortOption(option: String) {
+        _sortOption.value = option
     }
 
-    fun login(phone: String, pass: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val response = RetrofitClient.apiService.login(LoginRequest(phone, pass))
-                if (response.isSuccessful && response.body()?.status == "success") {
-                    val data = response.body()?.data
-                    if (data != null && data.customer_id != null) {
-                        prefs.edit()
-                            .putInt("customer_id", data.customer_id)
-                            .putString("customer_name", data.name ?: "Customer")
-                            .putString("customer_phone", data.phone ?: "")
-                            .apply()
-                        
-                        _isLoggedIn.value = true
-                        _customerName.value = data.name ?: "Customer"
-                        _customerPhone.value = data.phone ?: ""
-                        onSuccess()
-                    } else {
-                        onError("Invalid credentials")
-                    }
-                } else {
-                    onError("Invalid credentials or server error")
-                }
-            } catch (e: Exception) {
-                // Fallback for testing to allow progress
-                prefs.edit().putInt("customer_id", 1).putString("customer_name", "Demo User").apply()
-                _isLoggedIn.value = true
-                _customerName.value = "Demo User"
-                onSuccess()
-            }
-            _isLoading.value = false
+    private fun calculateHaversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
+        val R = 6371e3 // Earth radius in meters
+        val phi1 = Math.toRadians(lat1)
+        val phi2 = Math.toRadians(lat2)
+        val deltaPhi = Math.toRadians(lat2 - lat1)
+        val deltaLambda = Math.toRadians(lon2 - lon1)
+        val a = kotlin.math.sin(deltaPhi / 2) * kotlin.math.sin(deltaPhi / 2) +
+                kotlin.math.cos(phi1) * kotlin.math.cos(phi2) *
+                kotlin.math.sin(deltaLambda / 2) * kotlin.math.sin(deltaLambda / 2)
+        val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
+        return (R * c).toFloat()
+    }"""
+content = content.replace(target_viewmodel, replacement_viewmodel)
+
+# Update calculateDistances in RiderViewModel
+target_calc = """                                    val resultsArray = FloatArray(1)
+                                    Location.distanceBetween(
+                                        location.latitude, location.longitude,
+                                        loc.latitude, loc.longitude,
+                                        resultsArray
+                                    )
+                                    order.copy(distanceInMeters = resultsArray[0])"""
+replacement_calc = """                                    val distance = calculateHaversineDistance(
+                                        location.latitude, location.longitude,
+                                        loc.latitude, loc.longitude
+                                    )
+                                    order.copy(distanceInMeters = distance)"""
+content = content.replace(target_calc, replacement_calc)
+
+# Update UI states in RadarScreen
+target_ui_state = """    var sortOption by remember { mutableStateOf("Newest") }
+    var expandedSortMenu by remember { mutableStateOf(false) }
+    
+    val sortedOrders = remember(orders, sortOption) {
+        when (sortOption) {
+            "Total Amount" -> orders.sortedByDescending { it.totalAmount?.toDoubleOrNull() ?: 0.0 }
+            "Proximity" -> orders.sortedBy { it.distanceInMeters ?: Float.MAX_VALUE }
+            "Hub" -> orders.sortedBy { it.zone ?: "" }
+            else -> orders.sortedByDescending { it.orderId?.toIntOrNull() ?: 0 }
         }
-    }
-
-    fun register(name: String, phone: String, pass: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val response = RetrofitClient.apiService.register(RegisterRequest(name, phone, pass))
-                if (response.isSuccessful && response.body()?.status == "success") {
-                    val data = response.body()?.data
-                    if (data != null && data.customer_id != null) {
-                        prefs.edit()
-                            .putInt("customer_id", data.customer_id)
-                            .putString("customer_name", data.name ?: name)
-                            .putString("customer_phone", data.phone ?: phone)
-                            .apply()
-                        
-                        _isLoggedIn.value = true
-                        _customerName.value = data.name ?: name
-                        _customerPhone.value = data.phone ?: phone
-                        onSuccess()
-                    } else {
-                        onError("Registration failed")
-                    }
-                } else {
-                    onError("Registration failed or server error")
-                }
-            } catch (e: Exception) {
-                // Fallback for demo
-                prefs.edit().putInt("customer_id", 1).putString("customer_name", name).apply()
-                _isLoggedIn.value = true
-                _customerName.value = name
-                onSuccess()
-            }
-            _isLoading.value = false
+    }"""
+replacement_ui_state = """    val sortOption by viewModel.sortOption.collectAsState()
+    var expandedSortMenu by remember { mutableStateOf(false) }
+    
+    val sortedOrders = remember(orders, sortOption) {
+        when (sortOption) {
+            "Total Amount" -> orders.sortedByDescending { it.totalAmount?.toDoubleOrNull() ?: 0.0 }
+            "Distance (Haversine)" -> orders.sortedBy { it.distanceInMeters ?: Float.MAX_VALUE }
+            "Hub" -> orders.sortedBy { it.zone ?: "" }
+            else -> orders.sortedByDescending { it.orderId?.toIntOrNull() ?: 0 }
         }
-    }
+    }"""
+content = content.replace(target_ui_state, replacement_ui_state)
 
-    fun logout() {
-        prefs.edit().clear().apply()
-        _isLoggedIn.value = false
-        _customerName.value = "Guest"
-        _customerPhone.value = ""
-        _orderHistory.value = emptyList()
-        _cartItems.value = emptyMap()
-    }
+# Update Dropdown Menu in RadarScreen
+target_dropdown = """                    DropdownMenu(
+                        expanded = expandedSortMenu,
+                        onDismissRequest = { expandedSortMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Newest") },
+                            onClick = { sortOption = "Newest"; expandedSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Total Amount") },
+                            onClick = { sortOption = "Total Amount"; expandedSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Proximity") },
+                            onClick = { sortOption = "Proximity"; expandedSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Hub (Zone)") },
+                            onClick = { sortOption = "Hub"; expandedSortMenu = false }
+                        )
+                    }"""
+replacement_dropdown = """                    DropdownMenu(
+                        expanded = expandedSortMenu,
+                        onDismissRequest = { expandedSortMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Newest") },
+                            onClick = { viewModel.setSortOption("Newest"); expandedSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Total Amount") },
+                            onClick = { viewModel.setSortOption("Total Amount"); expandedSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Distance (Haversine)") },
+                            onClick = { viewModel.setSortOption("Distance (Haversine)"); expandedSortMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Hub (Zone)") },
+                            onClick = { viewModel.setSortOption("Hub"); expandedSortMenu = false }
+                        )
+                    }"""
+content = content.replace(target_dropdown, replacement_dropdown)
 
-    fun schedulePickup(
-        pickupSlot: String,
-        address: String,
-        detergent: String,
-        starch: String,
-        notes: String,
-        total: Int,
-        onSuccess: () -> Unit,
-        onError: () -> Unit
-    ) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val customerId = prefs.getInt("customer_id", -1)
-                val items = _cartItems.value.map {
-                    LaundryItemRequest(
-                        garment_id = it.key,
-                        quantity = it.value,
-                        service_type = "Wash & Iron"
-                    )
-                }
-                
-                val req = LaundryOrderRequest(
-                    customer_id = if (customerId != -1) customerId else 1,
-                    customer_name = _customerName.value,
-                    customer_phone = _customerPhone.value,
-                    items = items,
-                    pickup_slot = pickupSlot,
-                    pickup_address = address,
-                    detergent_pref = detergent,
-                    starch_level = starch,
-                    special_notes = notes,
-                    estimated_total = total
-                )
-
-                RetrofitClient.apiService.createLaundryOrder(req)
-                clearCart()
-                onSuccess()
-            } catch (e: Exception) {
-                clearCart() // For demo purpose
-                onSuccess()
-            }
-            _isLoading.value = false
-        }
-    }
-
-    fun fetchOrders() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val customerId = prefs.getInt("customer_id", -1)
-                if (customerId != -1) {
-                    val res = RetrofitClient.apiService.getCustomerOrders(customerId)
-                    if (res.data != null) {
-                        _orderHistory.value = res.data
-                    }
-                }
-            } catch (e: Exception) {
-                // Ignore for demo if backend fails
-                _orderHistory.value = listOf(
-                    OrderResponse(order_id = "ORD-001", date = "2026-08-31", status = "Washing", total_amount = 1200)
-                )
-            }
-            _isLoading.value = false
-        }
-    }
-}
-""")
+with open("app/src/main/java/com/example/MainActivity.kt", "w") as f:
+    f.write(content)

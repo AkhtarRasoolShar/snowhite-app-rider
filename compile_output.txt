@@ -1,0 +1,43 @@
+Reusing configuration cache.
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin FAILED
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:120:20 Unresolved reference 'ui'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:541:54 Unresolved reference 'Locale'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:949:25 None of the following candidates is applicable:
+fun Text(text: AnnotatedString, modifier: Modifier = ..., color: Color = ..., fontSize: TextUnit = ..., fontStyle: FontStyle? = ..., fontWeight: FontWeight? = ..., fontFamily: FontFamily? = ..., letterSpacing: TextUnit = ..., textDecoration: TextDecoration? = ..., textAlign: TextAlign? = ..., lineHeight: TextUnit = ..., overflow: TextOverflow = ..., softWrap: Boolean = ..., maxLines: Int = ..., minLines: Int = ..., inlineContent: Map<String, InlineTextContent> = ..., onTextLayout: (TextLayoutResult) -> Unit = ..., style: TextStyle = ...): Unit
+fun Text(text: String, modifier: Modifier = ..., color: Color = ..., fontSize: TextUnit = ..., fontStyle: FontStyle? = ..., fontWeight: FontWeight? = ..., fontFamily: FontFamily? = ..., letterSpacing: TextUnit = ..., textDecoration: TextDecoration? = ..., textAlign: TextAlign? = ..., lineHeight: TextUnit = ..., overflow: TextOverflow = ..., softWrap: Boolean = ..., maxLines: Int = ..., minLines: Int = ..., onTextLayout: ((TextLayoutResult) -> Unit)? = ..., style: TextStyle = ...): Unit
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:949:149 Unresolved reference 'TextAlign'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:1675:55 Unresolved reference 'Modifier'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:1676:62 Unresolved reference 'Modifier'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:1678:55 Unresolved reference 'Modifier'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:1684:63 Unresolved reference 'Modifier'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:1686:55 Unresolved reference 'Modifier'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:1691:63 Unresolved reference 'Modifier'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:1693:55 Unresolved reference 'Modifier'.
+e: file:///app/applet/app/src/main/java/com/example/MainActivity.kt:1700:63 Unresolved reference 'Modifier'.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 27s
+8 actionable tasks: 2 executed, 6 up-to-date
+Configuration cache entry reused.
